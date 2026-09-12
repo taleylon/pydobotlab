@@ -27,7 +27,7 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install -e ".[docs]"
       - run: mkdocs build --strict
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site/
 
@@ -44,4 +44,4 @@ jobs:
     steps:
       - name: Deploy documentation
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
