@@ -11,3 +11,4 @@ prune dist
 global-exclude __pycache__ *.py[cod]
 include mkdocs.yml
 prune site
+global-exclude PyPI-Recovery-Codes-*.txt
