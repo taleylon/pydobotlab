@@ -205,3 +205,15 @@ for f in failures: print(' ', f.port, f.reason, f.detail)
 ```
 
 If step 2 fails with `permission denied`, fix the dialout group. If step 2 fails with `device or resource busy`, stop brltty. If step 2 succeeds but step 3 returns nothing in `hits`, the cable/arm is the problem (different serial port, dead arm, missing firmware).
+
+## Qt libraries for the desktop panel
+
+On a minimal Ubuntu installation, the GUI may also need the system OpenGL
+libraries, even when running tests with `QT_QPA_PLATFORM=offscreen`:
+
+```bash
+sudo apt install libegl1 libopengl0
+```
+
+Install these if importing `PySide6.QtWidgets` reports a missing
+`libEGL.so.1` or `libOpenGL.so.0` library.
