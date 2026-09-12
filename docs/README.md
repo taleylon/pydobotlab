@@ -1,4 +1,4 @@
-# pydobotlab — User Guide
+# pydobotlab - User Guide
 
 `pydobotlab` is a pure-Python control library and GUI for the **Dobot Magician** robot arm. It replaces the official DobotStudio / DobotLab desktop app with something students can drive from a Python script *and* a control panel at the same time.
 
@@ -17,10 +17,10 @@ python -m pip install "pydobotlab[gui]"
 
 The guide is split into four parts:
 
-1. **[Getting Started](getting-started/install.md)** — installing the package, connecting to an arm, running your first program, and the simulator.
-2. **[API Reference](api/overview.md)** — every public function on `Magician`, grouped by what it does (motion, alarms, queue, end-effectors, I/O, ...). Each entry says what it does, what it returns, and which Dobot protocol command it sends.
-3. **[Control Panel & Broker](panel/overview.md)** — the PySide6 GUI, the multi-arm hub, and the TCP broker that lets the panel and a script share one arm.
-4. **[Protocol Reference](protocol/frame-format.md)** — the wire-level Dobot protocol: frame format, control byte, the full `CommandID` table, and how each ID maps back to a `Magician` method.
+1. **[Getting Started](getting-started/install.md)** - installing the package, connecting to an arm, running your first program, and the simulator.
+2. **[API Reference](api/overview.md)** - every public function on `Magician`, grouped by what it does (motion, alarms, queue, end-effectors, I/O, ...). Each entry says what it does, what it returns, and which Dobot protocol command it sends.
+3. **[Control Panel & Broker](panel/overview.md)** - the PySide6 GUI, the multi-arm hub, and the TCP broker that lets the panel and a script share one arm.
+4. **[Protocol Reference](protocol/frame-format.md)** - the wire-level Dobot protocol: frame format, control byte, the full `CommandID` table, and how each ID maps back to a `Magician` method.
 
 ## How the layers fit together
 
@@ -50,5 +50,5 @@ The script-side and panel-side both speak through the same `Magician` class. Whe
 ## Quick links
 
 - Source code on disk: `pydobotlab/` (library), `pydobotlab/panel/` (GUI), `examples/`.
-- Protocol PDF reference: [Dobot Communication Protocol V1.1.5](https://www.alcom.no/wp-content/uploads/2019/11/Dobot-Communication-Protocol-V1.1.5-1.pdf) — the canonical source for command IDs and parameter layouts. Every page in the [Protocol Reference](protocol/frame-format.md) section cites it.
-- Magician feature page: [Dobot Magician — features](https://www.dobot-robots.com/products/education/magician.html).
+- Protocol PDF reference: [Dobot Communication Protocol V1.1.5](https://www.alcom.no/wp-content/uploads/2019/11/Dobot-Communication-Protocol-V1.1.5-1.pdf) - the canonical source for command IDs and parameter layouts. Every page in the [Protocol Reference](protocol/frame-format.md) section cites it.
+- Magician feature page: [Dobot Magician - features](https://www.dobot-robots.com/products/education/magician.html).

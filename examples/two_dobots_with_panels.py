@@ -5,7 +5,7 @@ Workflow:
 
     1.  Plug in two Dobot Magicians (USB).
     2.  In one terminal:    pydobotlab-panel
-        - In the hub, click "Open Control Panel" twice — once per arm.
+        - In the hub, click "Open Control Panel" twice - once per arm.
         - Each panel shows a live X / Y / Z / R + J1..J4 readout updating
           at ~30 Hz, and the speed slider, jog pads, end-effector tabs and
           Set Home / Clear Alarm buttons all work.
@@ -13,7 +13,7 @@ Workflow:
             python examples/two_dobots_with_panels.py
         - The script's `Dobot()` calls AUTO-DETECT the running panel's
           broker on 127.0.0.1:8765 and route through it. No port arg, no
-          fuss — it just works because the broker arbitrates traffic.
+          fuss - it just works because the broker arbitrates traffic.
 
 What you should see while the script runs:
 
@@ -21,11 +21,11 @@ What you should see while the script runs:
       move under script control.
     * If you grab one of the panel's jog pads mid-script, your jog
       commands interleave with the script's commands at the broker's
-      per-port lock — neither corrupts the other on the wire.
+      per-port lock - neither corrupts the other on the wire.
     * If you push an unlocked arm by hand, the panel reflects the new
       pose even though the script issued no command.
 
-If the panel isn't running, this script still works — `Dobot()` falls
+If the panel isn't running, this script still works - `Dobot()` falls
 back to opening the serial port directly. You just won't get the live
 visualisation.
 """
@@ -52,14 +52,14 @@ def per_arm(
         print(f"[{label}] connected on {arm.port}")
         arm.clear_alarm()
         arm.set_home()
-        arm.motion_params = (40.0, 40.0)  # vel, acc — both sides
+        arm.motion_params = (40.0, 40.0)  # vel, acc - both sides
 
         for lap in range(laps):
             print(f"[{label}] lap {lap + 1}/{laps}")
             with arm.batch():
                 # Queue the whole lap; firmware runs it as one continuous
                 # program. The panel keeps polling get_pose() at 30 Hz,
-                # going through the same broker lock — readouts stay live.
+                # going through the same broker lock - readouts stay live.
                 for x, y, z, r in tour:
                     arm.ptp(PTPMode.MOVL_XYZ, x, y, z, r)
             arm.wait_idle(timeout=60)

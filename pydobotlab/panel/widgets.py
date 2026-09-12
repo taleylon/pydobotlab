@@ -2,10 +2,10 @@
 
 Two headline widgets:
 
-* :class:`JogPad` — four buttons in a + cross pattern that emit
+* :class:`JogPad` - four buttons in a + cross pattern that emit
   ``jog(JOGCmd)`` while held and ``stop()`` on release, so the panel can
   call ``dobot.jog(cmd, mode)`` / ``dobot.jog_stop()``.
-* :class:`CoordReadout` — a vertical stack of (label, value) rows for one
+* :class:`CoordReadout` - a vertical stack of (label, value) rows for one
   coordinate system. Used twice in the panel: once for ``X / Y / Z / R``
   next to the Cartesian jog pads, once for ``J1..J4`` next to the joint
   jog pads.
@@ -38,7 +38,7 @@ class JogButton(QPushButton):
         super().__init__(label, parent)
         self.setObjectName("jogSmall" if small else "jog")
         self._cmd = int(cmd)
-        # autoRepeat off — we want one press/release per click-and-hold cycle.
+        # autoRepeat off - we want one press/release per click-and-hold cycle.
         self.setAutoRepeat(False)
         self.setFocusPolicy(Qt.NoFocus)
         self.pressed.connect(self.emit_jog_command)
@@ -105,7 +105,7 @@ class JogPad(QFrame):
 class CoordReadout(QFrame):
     """Vertical stack of (label, value) rows for one coordinate system.
 
-    Used twice in the panel — once for Cartesian (X/Y/Z/R) sitting next to
+    Used twice in the panel - once for Cartesian (X/Y/Z/R) sitting next to
     the X/Y and Z/R jog pads, once for joints (J1..J4) sitting next to the
     J1/J2 and J3/J4 jog pads. Matches the original DobotLab layout where
     each coord system's numeric readout shares a row with its jog controls.

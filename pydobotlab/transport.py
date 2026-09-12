@@ -53,7 +53,7 @@ class SerialTransport:
     """A thread-safe wrapper around a single :class:`serial.Serial` port.
 
     The wrapper guarantees that a write/read pair for one frame is atomic
-    relative to other concurrent users of this transport — so a worker thread
+    relative to other concurrent users of this transport - so a worker thread
     can drive a request/response loop without interleaving traffic.
 
     Parameters
@@ -61,7 +61,7 @@ class SerialTransport:
     port:
         OS-specific serial device path (``/dev/ttyUSB0``, ``COM3``...).
     baudrate:
-        Defaults to 115200 — the only baud rate the Magician firmware speaks.
+        Defaults to 115200 - the only baud rate the Magician firmware speaks.
     timeout:
         Per-byte read timeout, in seconds. Frame-level reads accumulate bytes
         and surface a :class:`DobotTimeoutError` if a full frame doesn't
@@ -123,7 +123,7 @@ class SerialTransport:
             try:
                 serial_port.exclusive = self._exclusive
             except (ValueError, AttributeError, NotImplementedError):
-                # `exclusive` unsupported on this platform / pyserial — ignore.
+                # `exclusive` unsupported on this platform / pyserial - ignore.
                 pass
             serial_port.open()
             self._serial = serial_port
@@ -207,7 +207,7 @@ class SerialTransport:
 
 
 # ---------------------------------------------------------------------------
-# BrokerTransport — TCP-backed transport used when a DobotBroker is running.
+# BrokerTransport - TCP-backed transport used when a DobotBroker is running.
 #
 # Same public shape as SerialTransport so device.py can swap them blind.
 # ---------------------------------------------------------------------------

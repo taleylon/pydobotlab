@@ -22,8 +22,8 @@ pydobotlab exposes the queue both implicitly (every queued method returns its as
 **Returns.** `None` once the queue has reached `index`.
 
 **Raises.**
-* [`DobotTimeoutError`](errors.md#dobottimeouterror) — `timeout` elapsed before the index was reached.
-* [`DobotKinematicError`](errors.md#dobotkinematicerror-extends-dobotalarmerror) — motion alarm fired while waiting.
+* [`DobotTimeoutError`](errors.md#dobottimeouterror) - `timeout` elapsed before the index was reached.
+* [`DobotKinematicError`](errors.md#dobotkinematicerror-extends-dobotalarmerror) - motion alarm fired while waiting.
 
 **Protocol.** Polls [`GET_QUEUED_CMD_CURRENT_INDEX`](../protocol/command-ids.md) (246) and (when `raise_on_alarm`) [`GET_ALARMS_STATE`](../protocol/command-ids.md) (20) on every tick.
 
@@ -31,7 +31,7 @@ pydobotlab exposes the queue both implicitly (every queued method returns its as
 
 ## `wait_idle(*, timeout=None, poll=0.02, raise_on_alarm=True) -> None`
 
-**Purpose.** Block until the queue has executed every command issued from this `Magician` instance — i.e. until it has reached the last queue index pydobotlab returned.
+**Purpose.** Block until the queue has executed every command issued from this `Magician` instance - i.e. until it has reached the last queue index pydobotlab returned.
 
 **Inputs.** Same as `wait_for`, minus `index`.
 
@@ -77,7 +77,7 @@ pydobotlab exposes the queue both implicitly (every queued method returns its as
 
 **Purpose.** Read the firmware's current queue execution pointer.
 
-**Returns.** `int` — last-executed queue index.
+**Returns.** `int` - last-executed queue index.
 
 **Protocol.** [`GET_QUEUED_CMD_CURRENT_INDEX`](../protocol/command-ids.md) (246), read + immediate. Response: `u64`.
 
@@ -107,7 +107,7 @@ pydobotlab exposes the queue both implicitly (every queued method returns its as
 
 ---
 
-## `batch()` — context manager
+## `batch()` - context manager
 
 **Purpose.** A "lazy run" idiom DobotLab itself doesn't expose: pause the firmware queue, accumulate moves inside the block, resume execution on exit. Lets you queue a whole drawing first, then have the firmware run it as one continuous program at full motion-planning speed.
 
@@ -123,6 +123,6 @@ pydobotlab exposes the queue both implicitly (every queued method returns its as
 with bot.batch():
     for x, y in points:
         bot.move_to(x, y, 0, 0, wait=False)
-# Queue resumes here — arm runs the whole sequence as one continuous program.
+# Queue resumes here - arm runs the whole sequence as one continuous program.
 bot.wait_idle()
 ```

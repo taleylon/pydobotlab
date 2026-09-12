@@ -35,7 +35,7 @@ if alarms:
 
 | Arg | Type | Default | Meaning |
 |-----|------|---------|---------|
-| `verify` | `bool` | `False` | After clearing, sleep `settle` seconds and re-poll. If any *motion-related* alarm bit is still set, the firmware honoured the clear but the **physical condition** that triggered it (e.g. a joint mashed against a limit) is still active — raise [`DobotAlarmError`](errors.md#dobotalarmerror) so the student knows to fix the physical state, not just the bitmask. |
+| `verify` | `bool` | `False` | After clearing, sleep `settle` seconds and re-poll. If any *motion-related* alarm bit is still set, the firmware honoured the clear but the **physical condition** that triggered it (e.g. a joint mashed against a limit) is still active - raise [`DobotAlarmError`](errors.md#dobotalarmerror) so the student knows to fix the physical state, not just the bitmask. |
 | `settle` | `float` | `0.15` | Verification settle delay in seconds. Only relevant when `verify=True`. |
 
 **Returns.** `None`.
@@ -44,9 +44,9 @@ if alarms:
 
 **Protocol.** [`CLEAR_ALL_ALARMS_STATE`](../protocol/command-ids.md) (20), **write** + immediate. Param: empty. Response: ack.
 
-> **Note** — the protocol uses the same command ID (`20`) for read (get) and write (clear); the [`rw` bit](../protocol/ctrl-byte.md) of the control byte is what distinguishes them.
+> **Note** - the protocol uses the same command ID (`20`) for read (get) and write (clear); the [`rw` bit](../protocol/ctrl-byte.md) of the control byte is what distinguishes them.
 
-**Example — verify-on-clear.**
+**Example - verify-on-clear.**
 
 ```python
 from pydobotlab.errors import DobotAlarmError
@@ -54,7 +54,7 @@ from pydobotlab.errors import DobotAlarmError
 try:
     bot.clear_alarm(verify=True)
 except DobotAlarmError as e:
-    print("alarm reasserted — fix the physical condition first:")
+    print("alarm reasserted - fix the physical condition first:")
     for name in e.alarms:
         print("  •", name)
 ```
@@ -65,7 +65,7 @@ except DobotAlarmError as e:
 
 ## `ensure_no_alarms() -> None`
 
-**Purpose.** Guard call — raise [`DobotAlarmError`](errors.md#dobotalarmerror) if any alarm is currently active.
+**Purpose.** Guard call - raise [`DobotAlarmError`](errors.md#dobotalarmerror) if any alarm is currently active.
 
 **Returns.** `None`.
 
@@ -85,7 +85,7 @@ except DobotAlarmError as e:
 | `iter(alarmset)`              | iter    | Iterates the active alarm codes. |
 | `name in alarmset`            | `bool`  | Membership test. |
 | `.names()`                    | `list[str]` | Friendly names, including categorised labels for unmapped codes (e.g. `JOINT_LIMIT_POS_0x44`). |
-| `.format()`                   | `list[str]` | One `"{TAG}: {explanation + how to fix}"` line per active alarm — what the panel banner and `DobotKinematicError.message` use. |
+| `.format()`                   | `list[str]` | One `"{TAG}: {explanation + how to fix}"` line per active alarm - what the panel banner and `DobotKinematicError.message` use. |
 | `.describe()`                 | `list[str]` | Backwards-compat alias for `.format()`. |
 
 ---
@@ -107,7 +107,7 @@ except DobotAlarmError as e:
 
 Each named alarm has a one-line troubleshoot tip surfaced via `AlarmSet.format()`. For example, `LIMIT_POS_J3` reads:
 
-> `joint 3 (forearm) hit positive limit — jog Z down (or J3 negative), or call set_home()`
+> `joint 3 (forearm) hit positive limit - jog Z down (or J3 negative), or call set_home()`
 
 Unmapped bits are surfaced as `JOINT_LIMIT_POS_0x44` / `OVERSPEED_0x35` / `UNKNOWN_0x90` etc. so they're never silently dropped.
 
@@ -118,7 +118,7 @@ Unmapped bits are surfaced as `JOINT_LIMIT_POS_0x44` / `OVERSPEED_0x35` / `UNKNO
 | Situation | What to do |
 |-----------|-----------|
 | Workspace / IK alarm (`PLAN_INVERSE_RESOLVE`, `PLAN_MOTION_TARGET_OUT_OF_WORKSPACE`, `KINEMATIC_*`) | The physical state is fine; the *target* was the problem. Call [`bot.clear_alarm()`](#clear-alarm), then retry with a reachable target. |
-| Joint limit hit during JOG (`LIMIT_POS_J*` / `LIMIT_NEG_J*`) | The joint is *physically* against the stop. Jog away from the limit first, then `clear_alarm()`. Or just call [`bot.set_home()`](motion.md#set_home-waittrue-timeout600-raise_on_alarmtrue-int) — homing re-zeroes joints and clears the alarm in one step. |
+| Joint limit hit during JOG (`LIMIT_POS_J*` / `LIMIT_NEG_J*`) | The joint is *physically* against the stop. Jog away from the limit first, then `clear_alarm()`. Or just call [`bot.set_home()`](motion.md#set_home-waittrue-timeout600-raise_on_alarmtrue-int) - homing re-zeroes joints and clears the alarm in one step. |
 | Lost step (`LOST_STEP_J*`) | Re-home to recalibrate. |
 | Public / system fault (`PUBLIC_*`) | Power-cycle the arm (sometimes a re-home is enough for `PUBLIC_RESET`). |
 

@@ -52,7 +52,7 @@ See [Pose & motion](motion.md#get_posel-float).
 
 ## Lost-step detection
 
-A lost step happens when a joint's commanded position drifts from its measured position past a configurable threshold — usually because a motion was forced too hard.
+A lost step happens when a joint's commanded position drifts from its measured position past a configurable threshold - usually because a motion was forced too hard.
 
 ### `set_lost_step_params(value) -> int`
 
@@ -72,7 +72,7 @@ A lost step happens when a joint's commanded position drifts from its measured p
 
 ### `get_lost_step_result() -> list[str]`
 
-**Purpose.** Convenience wrapper — returns the names of currently-active alarms (any of which might be `LOST_STEP_J*`).
+**Purpose.** Convenience wrapper - returns the names of currently-active alarms (any of which might be `LOST_STEP_J*`).
 
 **Protocol.** Re-reads [`GET_ALARMS_STATE`](../protocol/command-ids.md) (20).
 
@@ -96,6 +96,6 @@ These are read-side commands that don't move the arm.
 
 ### `get_device_version() -> tuple[int, int, int]`
 
-**Purpose.** Firmware version `(major, minor, revision)`. Pure transport probe — used by the connection watchdog.
+**Purpose.** Firmware version `(major, minor, revision)`. Pure transport probe - used by the connection watchdog.
 
 **Protocol.** [`GET_DEVICE_VERSION`](../protocol/command-ids.md) (2), read + immediate.

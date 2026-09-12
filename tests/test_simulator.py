@@ -89,10 +89,10 @@ class TestFakeDobotFrameHandling:
         try:
             import struct
 
-            # MOVL_XYZ to (300, 0, 50, 0) — far from home, so we'll see motion
+            # MOVL_XYZ to (300, 0, 50, 0) - far from home, so we'll see motion
             params = bytes([2]) + struct.pack("<4f", 300.0, 0.0, 50.0, 0.0)
             bot.handle_frame(pack(CommandID.SET_PTP_CMD, 0b11, params))
-            # Sample pose immediately, then after ~0.4s — expect intermediate
+            # Sample pose immediately, then after ~0.4s - expect intermediate
             r0 = unpack(bot.handle_frame(pack(CommandID.GET_POSE, 0)))
             x0, *_ = unpack_floats(r0.params[:32])
             time.sleep(0.4)

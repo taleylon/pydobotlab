@@ -30,7 +30,7 @@ Things to notice:
 
 * `with Magician() as bot:` opens the port on entry and closes it on exit (so you don't leak the serial device if your script crashes).
 * `set_home()` and `move_to()` **block** until the firmware has executed them. Pass `wait=False` if you want to fire-and-forget.
-* `get_pose()` returns a [`Pose`](../api/motion.md#pose) — namedtuple-like, accessible by `.x .y .z .r` *and* by index, with a `.joints` property for the four joint angles.
+* `get_pose()` returns a [`Pose`](../api/motion.md#pose) - namedtuple-like, accessible by `.x .y .z .r` *and* by index, with a `.joints` property for the four joint angles.
 
 ## Adding the suction cup
 

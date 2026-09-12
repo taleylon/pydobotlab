@@ -2,7 +2,7 @@
 
 pydobotlab implements the **Dobot Communication Protocol V1.1.5**, the same protocol the official DobotStudio / DobotLink stack uses.
 
-> **Reference document.** [Dobot Communication Protocol V1.1.5 (PDF)](https://www.alcom.no/wp-content/uploads/2019/11/Dobot-Communication-Protocol-V1.1.5-1.pdf). Every command ID and parameter layout in this guide is taken directly from that PDF — when in doubt, that's the canonical source.
+> **Reference document.** [Dobot Communication Protocol V1.1.5 (PDF)](https://www.alcom.no/wp-content/uploads/2019/11/Dobot-Communication-Protocol-V1.1.5-1.pdf). Every command ID and parameter layout in this guide is taken directly from that PDF - when in doubt, that's the canonical source.
 
 The protocol is a **request / response** framing over a serial line at **115200 8N1**. Every command the host sends gets exactly one frame back, on the same line.
 
@@ -24,7 +24,7 @@ The protocol is a **request / response** framing over a serial line at **115200 
 | Params     | 0..N  | Command-specific. All multi-byte fields are **little-endian**. |
 | Checksum   | 1     | The byte that makes `(sum(payload) + checksum) mod 256 == 0`. I.e. `chk = (-sum(payload)) & 0xFF`. |
 
-## Worked example — `GetPose`
+## Worked example - `GetPose`
 
 Wire bytes the host sends:
 
@@ -91,6 +91,6 @@ class Frame:
 
 Lots of pydobotlab's `Magician` methods return `Frame` directly (or a value parsed out of `frame.params`).
 
-## Special case — queued response
+## Special case - queued response
 
-When you send a write with `isQueued=1`, the response payload is *always* a single `uint64` — the **queued-command index** assigned by the firmware. That's the integer `move_to`/`set_home`/`set_endeffector_*` return.
+When you send a write with `isQueued=1`, the response payload is *always* a single `uint64` - the **queued-command index** assigned by the firmware. That's the integer `move_to`/`set_home`/`set_endeffector_*` return.

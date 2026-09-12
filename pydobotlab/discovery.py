@@ -1,6 +1,6 @@
 """Find Dobot Magicians on the local machine.
 
-This module deliberately lives *outside* the :class:`Dobot` class — discovery
+This module deliberately lives *outside* the :class:`Dobot` class - discovery
 is independent of any one device, and a :class:`Dobot` instance should never
 need to know how it was found.
 
@@ -11,7 +11,7 @@ both for callers who prefer the class-method style:
   USB VID/PID matches a known Dobot adapter. Fast, side-effect free, but a
   USB-serial dongle for *something else* could also match.
 * :func:`discover` opens each candidate, sends ``GetDeviceSN`` and waits for
-  a response. Slower but authoritative — anything in the result really is a
+  a response. Slower but authoritative - anything in the result really is a
   Dobot, and the serial number lets you pin a particular arm to a particular
   variable across sessions.
 
@@ -37,10 +37,10 @@ from .transport import SerialTransport, is_port_claimed
 # Verified VID/PID pairs that have been observed shipping with the Dobot
 # Magician. Currently only the WCH CH340 (the chip on every Magician seen in
 # the wild) is in this list. If you find your kit uses a different adapter,
-# add its (vid, pid) to this set at import time — :func:`list_ports` will then
+# add its (vid, pid) to this set at import time - :func:`list_ports` will then
 # flag those ports as ``is_known_dobot_adapter=True``.
 KNOWN_DOBOT_USB_IDS: set[tuple[int, int]] = {
-    (0x1A86, 0x7523),  # WCH CH340 — the only adapter attested for Magicians
+    (0x1A86, 0x7523),  # WCH CH340 - the only adapter attested for Magicians
 }
 
 
@@ -79,7 +79,7 @@ def list_ports(*, only_known_adapters: bool = False) -> list[PortInfo]:
     only_known_adapters:
         If ``True``, drop ports whose USB VID/PID is not in
         :data:`KNOWN_DOBOT_USB_IDS`. Defaults to ``False`` so an arm behind a
-        not-yet-seen adapter still shows up — the trade-off is that other USB
+        not-yet-seen adapter still shows up - the trade-off is that other USB
         serial devices (Arduinos, RS-485 dongles, …) appear too.
     """
     try:
@@ -117,7 +117,7 @@ def is_dobot(port: str, *, timeout: float = 0.4) -> bool:
     response comes back inside ``timeout`` seconds.
     """
     if is_port_claimed(port):
-        # We hold it open already — by definition it answered our probe before.
+        # We hold it open already - by definition it answered our probe before.
         return True
     try:
         transport = SerialTransport(port, timeout=timeout)
@@ -139,8 +139,8 @@ class ProbeFailure:
     """A serial port that the probe tried to open or query but couldn't.
 
     Surfaced via :func:`discover_with_diagnostics` so callers can tell the
-    user *why* a port was rejected — "permission denied", "didn't answer",
-    "busy" — rather than silently dropping it. This is what the panel uses
+    user *why* a port was rejected - "permission denied", "didn't answer",
+    "busy" - rather than silently dropping it. This is what the panel uses
     to explain ttyACM-on-Linux pitfalls (dialout group, brltty grabbing the
     device) instead of just saying "no Dobots found".
     """
@@ -160,7 +160,7 @@ def discover(
     """Probe every candidate port; return ones that answer like a Dobot.
 
     Ports already claimed by a :class:`Dobot` instance in this process are
-    skipped — :func:`is_port_in_use` will tell you about those.
+    skipped - :func:`is_port_in_use` will tell you about those.
 
     For diagnostics about ports that *were* probed but didn't answer (e.g. a
     /dev/ttyACM0 you don't have permission for), use
@@ -191,7 +191,7 @@ def discover_with_diagnostics(
     the device, opening it raises ``PermissionError`` / "device or resource
     busy". The plain :func:`discover` would just drop the port and the user
     sees "no Dobots found" with no hint why. With diagnostics, the panel can
-    say "we tried /dev/ttyACM0 but got permission denied — add yourself to
+    say "we tried /dev/ttyACM0 but got permission denied - add yourself to
     the dialout group" instead.
     """
     skip_set = set(skip)
@@ -202,7 +202,7 @@ def discover_with_diagnostics(
         if info.port in skip_set:
             continue
         if info.is_claimed:
-            # Already held by a Magician in this process — not a failure.
+            # Already held by a Magician in this process - not a failure.
             continue
         try:
             transport = SerialTransport(info.port, timeout=timeout)

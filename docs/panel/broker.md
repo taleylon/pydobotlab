@@ -25,9 +25,9 @@ The broker is a tiny TCP server that lets several clients (the panel, your scrip
 Client → broker: `0x01 | u8 N | port[N]` (port name as ASCII).
 
 Broker → client (single byte):
-* `0x00` — attached. Subsequent traffic is request/response framing (below).
-* `0x01` — broker has no transport for that port and could not open one.
-* `0x02` — port is busy.
+* `0x00` - attached. Subsequent traffic is request/response framing (below).
+* `0x01` - broker has no transport for that port and could not open one.
+* `0x02` - port is busy.
 
 ### Per-frame request/response
 
@@ -35,7 +35,7 @@ Client → broker: `u16 LEN (big-endian) | DOBOT_FRAME[LEN]`.
 
 Broker → client: `u16 LEN (big-endian) | DOBOT_FRAME[LEN]`.
 
-The Dobot frames inside this tunnel are exactly the [wire frames](../protocol/frame-format.md) `Magician` would otherwise send straight to the serial port — the broker just forwards them and reads the reply.
+The Dobot frames inside this tunnel are exactly the [wire frames](../protocol/frame-format.md) `Magician` would otherwise send straight to the serial port - the broker just forwards them and reads the reply.
 
 ## Reference counting
 
@@ -52,7 +52,7 @@ broker.is_broker_reachable("127.0.0.1", 8765)  # bool
 broker.list_broker_ports("127.0.0.1", 8765)  # list[str]
 ```
 
-The broker object itself (`DobotBroker`) is also instantiable if you want to host your own — though normally the panel does it for you:
+The broker object itself (`DobotBroker`) is also instantiable if you want to host your own - though normally the panel does it for you:
 
 ```python
 from pydobotlab.broker import DobotBroker

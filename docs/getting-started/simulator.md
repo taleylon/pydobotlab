@@ -1,6 +1,6 @@
 # Running without hardware (simulator)
 
-`pydobotlab` ships with a built-in simulator so you can develop, demo, and run unit tests without an arm plugged in. The simulator monkey-patches `pyserial` at the bottom of the stack, so the rest of the library — `Magician`, the broker, the panel, your scripts — runs unchanged.
+`pydobotlab` ships with a built-in simulator so you can develop, demo, and run unit tests without an arm plugged in. The simulator monkey-patches `pyserial` at the bottom of the stack, so the rest of the library - `Magician`, the broker, the panel, your scripts - runs unchanged.
 
 ## From a script
 
@@ -17,7 +17,7 @@ with Magician(port="/dev/sim0") as bot:
     print(bot.get_pose())
 ```
 
-`install_simulator(arms=N)` is idempotent — calling it twice in the same process is a no-op. It:
+`install_simulator(arms=N)` is idempotent - calling it twice in the same process is a no-op. It:
 
 1. Replaces `serial.Serial` with a fake that talks to an in-memory `FakeDobot`.
 2. Replaces `serial.tools.list_ports.comports()` so discovery sees fake ports as if they were real Dobot adapters.
@@ -61,7 +61,7 @@ from pydobotlab.simulator import stop_all
 stop_all()  # joins all FakeDobot background threads
 ```
 
-You normally don't need to call this — the threads are daemons and exit with the process.
+You normally don't need to call this - the threads are daemons and exit with the process.
 
 ## Next
 

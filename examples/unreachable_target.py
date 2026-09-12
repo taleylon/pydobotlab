@@ -1,4 +1,4 @@
-"""Demonstrate the unreachable-target error path — works against simulator.
+"""Demonstrate the unreachable-target error path - works against simulator.
 
 Run with the simulator (no hardware needed):
     python examples/unreachable_target.py --simulator
@@ -43,10 +43,10 @@ def main() -> int:
         try:
             bot.move_to(500, 500, 0, 0, mode=PTPMode.MOVL_XYZ, timeout=5)
         except DobotKinematicError as e:
-            print(f"REJECTED — {type(e).__name__}: {e}")
+            print(f"REJECTED - {type(e).__name__}: {e}")
             print(f"    active alarms: {e.alarms}")
         else:
-            print("(unexpectedly succeeded — workspace bounds not enforced)")
+            print("(unexpectedly succeeded - workspace bounds not enforced)")
             return 1
 
         # 3. Recovery: clear the alarm, then continue.
@@ -58,7 +58,7 @@ def main() -> int:
         bot.move_to(260, -50, 30, 0, mode=PTPMode.MOVJ_XYZ)
         print("OK")
 
-    print("\nDone — student can catch DobotKinematicError, call clear_alarm, retry.")
+    print("\nDone - student can catch DobotKinematicError, call clear_alarm, retry.")
     return 0
 
 

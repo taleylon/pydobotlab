@@ -19,10 +19,10 @@ See [Connecting to an arm](../getting-started/connect.md) for the full table of 
 **Returns.** `None`.
 
 **Raises.**
-* [`DobotConnectionError`](errors.md#dobotconnectionerror) — port not found or open failed.
-* [`DobotPortInUseError`](errors.md#dobotportinuseerror-extends-dobotconnectionerror) — a second Magician in this process already owns this port, or the OS refused exclusive access.
+* [`DobotConnectionError`](errors.md#dobotconnectionerror) - port not found or open failed.
+* [`DobotPortInUseError`](errors.md#dobotportinuseerror-extends-dobotconnectionerror) - a second Magician in this process already owns this port, or the OS refused exclusive access.
 
-**Protocol.** No single command — at the wire level this is the OS-side `serial.Serial.open()` (or a TCP `ATTACH` to the broker), followed by:
+**Protocol.** No single command - at the wire level this is the OS-side `serial.Serial.open()` (or a TCP `ATTACH` to the broker), followed by:
 * [`SET_QUEUED_CMD_CLEAR`](../protocol/command-ids.md) (245)
 * [`SET_QUEUED_CMD_START_EXEC`](../protocol/command-ids.md) (240)
 
@@ -47,13 +47,13 @@ bot.disconnect()
 
 **Returns.** `None`.
 
-**Raises.** Doesn't raise — the close path swallows transport errors so you can call it from `finally:` blocks safely.
+**Raises.** Doesn't raise - the close path swallows transport errors so you can call it from `finally:` blocks safely.
 
 **Protocol.** Sends [`SET_QUEUED_CMD_STOP_EXEC`](../protocol/command-ids.md) (241) on the way out, then closes the OS handle (or sends a TCP close to the broker).
 
 ---
 
-## `__enter__() / __exit__()` — context-manager support
+## `__enter__() / __exit__()` - context-manager support
 
 **Purpose.** Use `Magician` with `with`, which calls `connect()` on entry and `disconnect()` on exit even if an exception is raised inside the block.
 
@@ -62,7 +62,7 @@ bot.disconnect()
 ```python
 with Magician() as bot:
     bot.move_to(200, 0, 50, 0)
-# Disconnected here — even if the move raised.
+# Disconnected here - even if the move raised.
 ```
 
 ---
@@ -87,5 +87,5 @@ with Magician() as bot:
 
 These live in `pydobotlab.discovery` and are documented on the [Discovery](discovery.md) page, but you'll see them often when wrangling multi-arm setups:
 
-* `is_port_in_use(port)` — `True` if some `Magician` in *this process* currently owns the port.
-* `find_free_port(only_known_adapters=False)` — return the first port that answers like a Dobot and isn't already claimed.
+* `is_port_in_use(port)` - `True` if some `Magician` in *this process* currently owns the port.
+* `find_free_port(only_known_adapters=False)` - return the first port that answers like a Dobot and isn't already claimed.

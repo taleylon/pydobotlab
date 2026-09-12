@@ -39,7 +39,7 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
         "--simulator",
         "-s",
         action="store_true",
-        help="Run with simulated Dobots — no real hardware required. "
+        help="Run with simulated Dobots - no real hardware required. "
         "Useful for offline debugging or demoing the UI.",
     )
     parser.add_argument(
@@ -90,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     app = QApplication(sys.argv[:1])  # Qt only wants progname
     app.setApplicationName("pydobotlab")
     if arguments.simulator:
-        app.setApplicationDisplayName("pydobotlab — SIMULATOR")
+        app.setApplicationDisplayName("pydobotlab - SIMULATOR")
     app.setOrganizationName("pydobotlab")
     app.setStyleSheet(load_stylesheet())
 

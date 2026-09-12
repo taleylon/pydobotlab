@@ -30,7 +30,7 @@ from pydobotlab.errors import (
 
 ## `DobotError`
 
-Base class — never raised directly. Catch this if you want to handle "anything pydobotlab can fail with".
+Base class - never raised directly. Catch this if you want to handle "anything pydobotlab can fail with".
 
 ---
 
@@ -57,7 +57,7 @@ If you see this and don't expect it: check whether the control panel is already 
 
 ## `DobotProtocolError`
 
-A malformed or unexpected packet was received from the arm — bad frame header, length mismatch, or bad checksum. pydobotlab's reader resyncs on bad headers, so this generally means the wire was *very* corrupted (cable issue, baud-rate mismatch).
+A malformed or unexpected packet was received from the arm - bad frame header, length mismatch, or bad checksum. pydobotlab's reader resyncs on bad headers, so this generally means the wire was *very* corrupted (cable issue, baud-rate mismatch).
 
 ---
 
@@ -78,7 +78,7 @@ class DobotAlarmError(DobotError):
     def __init__(self, alarms: list[str] | None = None, message: str = ""): ...
 ```
 
-* `alarms` — list of alarm names that were active.
+* `alarms` - list of alarm names that were active.
 * The default message is `f"Dobot alarms active: {self.alarms}"`; you can override.
 
 Raised by [`ensure_no_alarms()`](alarms.md#ensure_no_alarms-none) and by [`clear_alarm(verify=True)`](alarms.md#clear-alarm) when the alarm reasserts itself after clearing.
@@ -89,13 +89,13 @@ Raised by [`ensure_no_alarms()`](alarms.md#ensure_no_alarms-none) and by [`clear
 
 A motion command failed because the firmware couldn't plan or execute it. Specifically, one of these alarms fired while a motion was pending:
 
-* `PLAN_INVERSE_RESOLVE` — IK solver couldn't find a solution.
-* `PLAN_MOTION_TARGET_OUT_OF_WORKSPACE` — target outside reach.
-* `KINEMATIC_TARGET_OUT_OF_WORKSPACE` — same, kinematic side.
-* `PLAN_INVERSE_LIMIT` / `KINEMATIC_INVERSE_LIMIT` — IK hit a joint limit.
-* `PLAN_IN_SINGULARITY_ZONE` / `KINEMATIC_SINGULARITY` — singular pose.
-* `PLAN_CURRENT_JOINT_OUT_OF_RANGE` — start pose already off-range.
-* `LIMIT_POS_J*` / `LIMIT_NEG_J*` — joint limit struck mid-motion.
+* `PLAN_INVERSE_RESOLVE` - IK solver couldn't find a solution.
+* `PLAN_MOTION_TARGET_OUT_OF_WORKSPACE` - target outside reach.
+* `KINEMATIC_TARGET_OUT_OF_WORKSPACE` - same, kinematic side.
+* `PLAN_INVERSE_LIMIT` / `KINEMATIC_INVERSE_LIMIT` - IK hit a joint limit.
+* `PLAN_IN_SINGULARITY_ZONE` / `KINEMATIC_SINGULARITY` - singular pose.
+* `PLAN_CURRENT_JOINT_OUT_OF_RANGE` - start pose already off-range.
+* `LIMIT_POS_J*` / `LIMIT_NEG_J*` - joint limit struck mid-motion.
 
 The exception's `str()` includes one `"{TAG}: {explanation + how to fix}"` line per active alarm, plus the recovery instruction:
 

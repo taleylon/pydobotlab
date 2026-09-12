@@ -1,4 +1,4 @@
-"""Simulator backend — view & test the panel without a real Dobot.
+"""Simulator backend - view & test the panel without a real Dobot.
 
 Activate with::
 
@@ -59,12 +59,12 @@ SIM_WORKSPACE = {
 }
 
 
-# Alarm bit set when a target falls outside SIM_WORKSPACE — matches the
+# Alarm bit set when a target falls outside SIM_WORKSPACE - matches the
 # real firmware's PLAN_MOTION_TARGET_OUT_OF_WORKSPACE code (0x14).
 ALARM_OUT_OF_WORKSPACE_CODE = 0x14
 
 
-# Default speed of the simulated arm (mm/sec) — controls how visibly the
+# Default speed of the simulated arm (mm/sec) - controls how visibly the
 # panel's pose readout animates between waypoints.
 DEFAULT_SPEED_MM_PER_S = 200.0
 DEFAULT_JOG_SPEED_MM_PER_S = 80.0
@@ -73,7 +73,7 @@ DEFAULT_TICK_HZ = 30.0
 
 
 # ---------------------------------------------------------------------------
-# FakeDobot — software-only Dobot Magician
+# FakeDobot - software-only Dobot Magician
 # ---------------------------------------------------------------------------
 
 
@@ -104,7 +104,7 @@ class ActiveJog:
     """An ongoing JOG: nudge the pose in this direction every sim tick."""
 
     mode: int  # 0 = COORDINATE, 1 = JOINT
-    cmd: int  # 1..8 — see protocol.JOGCmd
+    cmd: int  # 1..8 - see protocol.JOGCmd
 
 
 class FakeDobot:
@@ -135,7 +135,7 @@ class FakeDobot:
         self._jog: ActiveJog | None = None
         # Internal "100% velocity" baselines. Effective speed every tick is
         # baseline * (vel_ratio / 100), so the panel's speed slider directly
-        # controls how fast jogs and PTPs run — same as a real arm.
+        # controls how fast jogs and PTPs run - same as a real arm.
         self._jog_baseline_mm = DEFAULT_JOG_SPEED_MM_PER_S
         self._jog_baseline_deg = DEFAULT_JOG_SPEED_DEG_PER_S
         self._ptp_baseline_mm = float(speed_mm_per_s)
@@ -169,7 +169,7 @@ class FakeDobot:
     def _run_motion_loop(self) -> None:
         while not self._stop.is_set():
             with self._lock:
-                # 1. Active JOG — nudge pose every tick. JOG cancels any
+                # 1. Active JOG - nudge pose every tick. JOG cancels any
                 #    pending PTP target (manual override beats automation).
                 if self._jog is not None:
                     self._apply_jog_step(self._jog)
@@ -252,7 +252,7 @@ class FakeDobot:
             state.x += dx * (step / distance)
             state.y += dy * (step / distance)
             state.z += dz * (step / distance)
-            # R rotates fast — interpolate proportionally to XY/Z progress.
+            # R rotates fast - interpolate proportionally to XY/Z progress.
             state.r += (target.r - state.r) * (step / distance)
 
     def stop(self) -> None:
@@ -262,7 +262,7 @@ class FakeDobot:
     # ---- helpers used by the frame handler --------------------------------
 
     def enqueue_home(self) -> int:
-        """Multi-stage homing — lift Z, rotate to home XY, descend.
+        """Multi-stage homing - lift Z, rotate to home XY, descend.
 
         Mimics the visible behaviour of a real Magician: it first lifts
         out of the work area, then swings the base around to align with
@@ -315,7 +315,7 @@ class FakeDobot:
         )
 
     def complete_queued_command(self) -> int:
-        """For queued commands that don't move the arm — bump the counter."""
+        """For queued commands that don't move the arm - bump the counter."""
         with self._lock:
             self._queue_added += 1
             self._queue_executed = self._queue_added  # instantly "done"
@@ -372,7 +372,7 @@ class FakeDobot:
         if command_id == CommandID.SET_JOG_CMD and is_write and len(params) >= 2:
             mode, cmd = params[0], params[1]
             with self._lock:
-                if cmd == 0:  # IDLE — release jog
+                if cmd == 0:  # IDLE - release jog
                     self._jog = None
                 else:
                     self._jog = ActiveJog(mode=int(mode), cmd=int(cmd))
@@ -411,7 +411,7 @@ class FakeDobot:
         # --- Jump-mode params (zlimit, height in wire-order height/zlimit)
         if command_id == CommandID.GET_SET_PTP_JUMP_PARAMS:
             if is_write and len(params) >= 8:
-                # Wire order: (jumpHeight, zLimit) — the device.py property
+                # Wire order: (jumpHeight, zLimit) - the device.py property
                 # already swaps for us before sending.
                 height, zlimit = struct.unpack("<2f", params[:8])
                 with self._lock:
@@ -502,7 +502,7 @@ class FakeDobot:
 
 
 # ---------------------------------------------------------------------------
-# FakeDobotSerial — implements just enough of pyserial.Serial
+# FakeDobotSerial - implements just enough of pyserial.Serial
 # ---------------------------------------------------------------------------
 
 # One FakeDobot per port name, shared across all serial.Serial(port=...) calls.
@@ -525,7 +525,7 @@ class FakeDobotSerial:
     def __init__(self, **kwargs) -> None:
         # Mirror real pyserial: a port given at construction opens immediately;
         # otherwise the caller sets .port (and dtr/rts/etc as plain attributes)
-        # and calls open() — the closed-first pattern SerialTransport now uses.
+        # and calls open() - the closed-first pattern SerialTransport now uses.
         self.port = kwargs.get("port")
         self.timeout = kwargs.get("timeout", 1.0)
         self.write_timeout = kwargs.get("write_timeout", 1.0)
@@ -551,7 +551,7 @@ class FakeDobotSerial:
         pass
 
     def write(self, data: bytes) -> int:
-        # The Dobot framing is well-defined — accept the entire packet at
+        # The Dobot framing is well-defined - accept the entire packet at
         # once (the transport layer always issues full frames in one write).
         response = self._dobot.handle_frame(bytes(data))
         if response:
@@ -573,7 +573,7 @@ class FakeDobotSerial:
 
 
 # ---------------------------------------------------------------------------
-# Public API: install_simulator() — patch the world
+# Public API: install_simulator() - patch the world
 # ---------------------------------------------------------------------------
 
 
@@ -597,7 +597,7 @@ def install_simulator(arms: int = 2) -> list[str]:
 
     After this returns, any code path that opens ``serial.Serial(port=...)``
     or enumerates ``serial.tools.list_ports.comports()`` will see the fake
-    Dobots — including :class:`Dobot`, :func:`Discovery.discover`, and the
+    Dobots - including :class:`Dobot`, :func:`Discovery.discover`, and the
     panel GUI.
 
     Idempotent within a process; calling twice is a no-op.

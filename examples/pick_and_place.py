@@ -17,7 +17,7 @@ def pick_one(bot: Dobot, pickup, drop) -> None:
     dx, dy, dz, dr = drop
 
     # JUMP_XYZ (mode=0): firmware lifts to the configured jump height,
-    # traverses, drops to target — perfectly safe vs. obstacles.
+    # traverses, drops to target - perfectly safe vs. obstacles.
     bot.ptp(mode=0, x=px, y=py, z=pz, r=pr)
 
     bot.set_endeffector_suctioncup(enable=True, on=True)  # 3.6.13

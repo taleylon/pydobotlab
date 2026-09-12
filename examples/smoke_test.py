@@ -58,7 +58,7 @@ def main() -> int:
         # 2. Device info
         print(f"firmware version: {bot.get_device_version()}")
 
-        # 3. Pose (3.6.21) — GitBook tuple unpack
+        # 3. Pose (3.6.21) - GitBook tuple unpack
         x, y, z, r, joints = bot.get_pose()
         print(
             f"current pose: x={x:.1f} y={y:.1f} z={z:.1f} r={r:.1f}  "
@@ -72,7 +72,7 @@ def main() -> int:
             bot.set_home()
             print(f"home done in {time.monotonic() - t0:.1f}s")
 
-        # 5. Movement rate (3.6.6) — property style
+        # 5. Movement rate (3.6.6) - property style
         bot.motion_params = (50.0, 50.0)
         bot.move_to(200, 0, 50, 0, mode=PTPMode.MOVJ_XYZ)
         print("moved to (200, 0, 50, 0)")

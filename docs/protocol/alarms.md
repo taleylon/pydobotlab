@@ -1,6 +1,6 @@
 # Alarm bitmask
 
-`GET_ALARMS_STATE` (cmd 20, read) returns 16 raw bytes — a 128-bit alarm bitmask. Each bit is a named alarm code from `0x00` to `0x7F`. pydobotlab decodes this into an [`AlarmSet`](../api/alarms.md#alarmset).
+`GET_ALARMS_STATE` (cmd 20, read) returns 16 raw bytes - a 128-bit alarm bitmask. Each bit is a named alarm code from `0x00` to `0x7F`. pydobotlab decodes this into an [`AlarmSet`](../api/alarms.md#alarmset).
 
 ## Bit layout
 
@@ -32,7 +32,7 @@ A complete enumeration of named codes is on the [Alarms](../api/alarms.md#alarm-
 
 Codes `0x10..0x77` (i.e. plan / kinematic / overspeed / joint-limit / lost-step / other) are **motion-related**. When any of these fire while a motion is pending, pydobotlab raises [`DobotKinematicError`](../api/errors.md#dobotkinematicerror-extends-dobotalarmerror) from the waiters ([`move_to`](../api/motion.md#move-to), [`set_home`](../api/motion.md#set_home-waittrue-timeout600-raise_on_alarmtrue-int), [`wait_for`](../api/queue.md#wait_forindex-timeoutnone-poll002-raise_on_alarmtrue-none), [`wait_idle`](../api/queue.md#wait_idle-timeoutnone-poll002-raise_on_alarmtrue-none)) instead of waiting forever for a queued command the firmware has refused to execute.
 
-Codes `0x00..0x07` (system) typically need a power-cycle, not just `clear_alarm()`. pydobotlab does *not* automatically raise on these — they're informational.
+Codes `0x00..0x07` (system) typically need a power-cycle, not just `clear_alarm()`. pydobotlab does *not* automatically raise on these - they're informational.
 
 ## Pretty-printing
 
@@ -46,7 +46,7 @@ if mask:
 Sample output (for `LIMIT_POS_J3`):
 
 ```
- • LIMIT_POS_J3: joint 3 (forearm) hit positive limit — jog Z down (or J3 negative), or call set_home()
+ • LIMIT_POS_J3: joint 3 (forearm) hit positive limit - jog Z down (or J3 negative), or call set_home()
 ```
 
 The `format()` output is what the panel banner displays and what `DobotKinematicError`'s message contains.

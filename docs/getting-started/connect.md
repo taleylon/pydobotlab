@@ -1,6 +1,6 @@
 # Connecting to an arm
 
-## The simplest case — auto-pick
+## The simplest case - auto-pick
 
 If you have one arm plugged in, this is enough:
 
@@ -49,7 +49,7 @@ with Magician(port="COM3") as bot:
 
 ## Multiple arms in one script
 
-`Magician` instances are completely independent — each owns its own serial port (or its own broker channel). You can drive several arms in parallel from the same script:
+`Magician` instances are completely independent - each owns its own serial port (or its own broker channel). You can drive several arms in parallel from the same script:
 
 ```python
 from pydobotlab import Magician
@@ -75,10 +75,10 @@ See `examples/multi_dobot.py` and `examples/two_dobots_with_panels.py` for fulle
 
 ## Sharing one arm with the control panel
 
-If `pydobotlab-panel` is already running, start your script normally — `Magician()` will detect the broker on `127.0.0.1:8765` and route through it automatically. Both the panel's live readout and your script's commands will be interleaved on the same arm.
+If `pydobotlab-panel` is already running, start your script normally - `Magician()` will detect the broker on `127.0.0.1:8765` and route through it automatically. Both the panel's live readout and your script's commands will be interleaved on the same arm.
 
 ```python
-# Panel running in another terminal? Same code as before — no change needed.
+# Panel running in another terminal? Same code as before - no change needed.
 with Magician(port="COM3") as bot:
     bot.move_to(200, 0, 0, 0)
 ```
@@ -87,5 +87,5 @@ For the gritty details of how broker routing works, see [The DobotBroker](../pan
 
 ## Next
 
-* [Hello, Magician — your first script →](first-script.md)
+* [Hello, Magician - your first script →](first-script.md)
 * [Running without hardware (simulator) →](simulator.md)

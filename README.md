@@ -41,8 +41,19 @@ with Magician() as robot:  # auto-discover; or specify "/dev/ttyUSB0" / "COM3"
     robot.set_home()
     robot.move_to(220, 0, 50, mode=PTPMode.MOVJ_XYZ)
     pose = robot.get_pose()
-    print(pose.x, pose.y, pose.z, pose.joints)
+    print(pose)
 ```
+
+`print(pose)` displays `x`, `y`, `z`, `r`, and all four joint angles:
+
+```text
+Pose(x=220.00, y=0.00, z=50.00, r=0.00, joints=[0.00, 30.00, 45.00, 0.00])
+```
+
+The values above illustrate the format; actual joint angles depend on the robot's
+pose. Access individual values with `pose.x`, `pose.y`, `pose.z`, `pose.r`, or
+`pose.joints`. Positions are in millimetres and angles are in degrees. Display
+values are rounded to two decimal places; the attributes keep their full precision.
 
 `Dobot` is also available as an alias for `Magician`. The documented DobotLab
 method names and parameters are preserved for existing scripts and teaching material.

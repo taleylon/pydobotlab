@@ -209,7 +209,7 @@ def read_frame(read_byte: Callable[[], bytes]) -> Frame:
 
 
 # ---------------------------------------------------------------------------
-# Convenience param packers — used by device.py to build typed commands.
+# Convenience param packers - used by device.py to build typed commands.
 # All multi-byte fields are little-endian per the protocol spec.
 # ---------------------------------------------------------------------------
 

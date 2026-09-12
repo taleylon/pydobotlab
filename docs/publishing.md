@@ -8,6 +8,29 @@ to the guide. These addresses become live after repository and Pages setup.
 GitHub hosts the source and documentation. PyPI hosts the downloadable
 package used by `python -m pip install pydobotlab`. They are separate accounts.
 
+## Edit the PyPI project page
+
+The PyPI description comes from the root `README.md`, selected by
+`readme = "README.md"` in `pyproject.toml`. Edit that file to change the examples
+or text on the main PyPI page. Edit `[project.urls]` in `pyproject.toml` to change
+the Homepage, Documentation, Repository, or Issues links.
+
+PyPI stores this metadata with a release. Pushing README changes to GitHub does
+not update an already published PyPI page, and there is no description editor
+for an existing release. To publish the updated description:
+
+1. Edit `README.md` and preview it on GitHub.
+2. Increase `__version__` in `pydobotlab/__init__.py` to a new version.
+3. Run the checks below, commit the changes, and push a matching `vVERSION` tag.
+4. Run **Publish package** on that tag with destination `pypi`.
+
+Even a description-only PyPI update needs a new version. Changes to the
+GitHub README or the documentation homepage can be deployed without a package
+release. Edit `docs/README.md` for the documentation homepage; `site/` contains
+build output and should not be edited directly.
+
+See the [PyPA README guide](https://packaging.python.org/en/latest/guides/making-a-pypi-friendly-readme/).
+
 ## Verify locally
 
 ```bash

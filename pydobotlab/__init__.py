@@ -1,4 +1,4 @@
-"""pydobotlab — pure-Python control library for the Dobot Magician robot arm.
+"""pydobotlab - pure-Python control library for the Dobot Magician robot arm.
 
 Public surface kept small and stable; everything else lives in submodules.
 """
@@ -45,7 +45,7 @@ __all__ = [
     "JogMode",
     "EndEffectorType",
     "IOFunction",
-    # Discovery (functions and class — both equivalent)
+    # Discovery (functions and class - both equivalent)
     "Discovery",
     "PortInfo",
     "DiscoveredDobot",

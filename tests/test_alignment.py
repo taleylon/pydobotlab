@@ -16,7 +16,7 @@ from pydobotlab.device import parse_io_port
 # ---- 1. Every documented official method is present ---------------------
 
 OFFICIAL_METHODS = [
-    # (3.6.1 - 3.6.28) — name only; signatures are checked separately.
+    # (3.6.1 - 3.6.28) - name only; signatures are checked separately.
     "ptp",  # 3.6.1
     "set_device_withl",  # 3.6.2
     "set_ptpl_params",  # 3.6.3
@@ -44,7 +44,7 @@ OFFICIAL_METHODS = [
     "set_lost_step_params",  # 3.6.25
     "set_lost_step_cmd",  # 3.6.26
     "get_lost_step_result",  # 3.6.27
-    "set_converyor",  # 3.6.28 — official typo preserved
+    "set_converyor",  # 3.6.28 - official typo preserved
 ]
 
 
@@ -96,7 +96,7 @@ def test_set_conveyor_alias_for_typo_function():
 def test_signature_matches_gitbook(method, params):
     sig = inspect.signature(getattr(Dobot, method))
     actual = list(sig.parameters.keys())
-    assert actual == params, f"Dobot.{method} signature drift — expected {params}, got {actual}"
+    assert actual == params, f"Dobot.{method} signature drift - expected {params}, got {actual}"
 
 
 def test_get_color_sensor_takes_no_args():
@@ -112,6 +112,18 @@ def test_pose_iterates_as_xyzr_then_jointangle_list():
     x, y, z, r, joints = p
     assert (x, y, z, r) == (1.0, 2.0, 3.0, 4.0)
     assert joints == [10.0, 20.0, 30.0, 40.0]
+
+
+def test_print_pose_includes_rotation_and_all_joints_without_changing_values(capsys):
+    pose = Pose(1.23456, -2.34567, 3.45678, -4.56789, 10.1, -20.2, 30.3, -40.4)
+
+    print(pose)
+
+    assert capsys.readouterr().out == (
+        "Pose(x=1.23, y=-2.35, z=3.46, r=-4.57, joints=[10.10, -20.20, 30.30, -40.40])\n"
+    )
+    assert pose.as_xyzr() == (1.23456, -2.34567, 3.45678, -4.56789)
+    assert pose.joints == [10.1, -20.2, 30.3, -40.4]
 
 
 def test_pose_attribute_access_still_works():

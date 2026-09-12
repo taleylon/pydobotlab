@@ -1,6 +1,6 @@
 # Method ↔ command mapping
 
-The reverse direction of the [Command ID table](command-ids.md) — every public `Magician` method, sorted alphabetically, with the protocol command ID it sends. Useful when you're staring at a wire trace and want to know "which Python call produced *this* frame?"
+The reverse direction of the [Command ID table](command-ids.md) - every public `Magician` method, sorted alphabetically, with the protocol command ID it sends. Useful when you're staring at a wire trace and want to know "which Python call produced *this* frame?"
 
 For each method: the `CommandID` it sends, the ctrl byte, and the param layout (in `struct`-ish notation; all multi-byte fields are little-endian).
 
@@ -29,7 +29,7 @@ For each method: the `CommandID` it sends, the ctrl byte, and the param layout (
 | [`get_pose`](../api/motion.md#get_pose) | 10 | `0x00` | – | Returns 8 × f32: `x, y, z, r, j1..j4`. |
 | [`get_posel`](../api/motion.md#get_posel-float) | 13 | `0x00` | – | Returns f32 mm. |
 | `home` *(deprecated alias)* | 31 | `0x03` | `u32 mode=0` | See `set_home`. |
-| [`jog`](../api/jog.md#jog-live-non-trajectory-motion) | 73 | `0x01` | `u8 isJoint, u8 cmd` | **Immediate**, not queued — see [Control byte](ctrl-byte.md). |
+| [`jog`](../api/jog.md#jog-live-non-trajectory-motion) | 73 | `0x01` | `u8 isJoint, u8 cmd` | **Immediate**, not queued - see [Control byte](ctrl-byte.md). |
 | [`jog_stop`](../api/jog.md#jog_stop-none) | 73 | `0x01` | `u8 isJoint, u8 0` | Sends JOGCmd.IDLE. |
 | [`jump_params` *(getter)*](../api/speed.md#jump_params-property-tuplefloat-float) | 82 | `0x00` | – | |
 | [`jump_params` *(setter)*](../api/speed.md#jump_params-property-tuplefloat-float) | 82 | `0x03` | `f32 jumpHeight, f32 zLimit` | API takes `(zlimit, height)`; wire order is swapped. |
@@ -67,8 +67,8 @@ For each method: the `CommandID` it sends, the ctrl byte, and the param layout (
 
 ## Reading this table
 
-* **Cmd ID** — decimal protocol ID. See the [Command ID table](command-ids.md) for the symbol name.
-* **Ctrl** — `0x00` read-immediate, `0x01` write-immediate, `0x03` write-queued. (`0x02` read-queued isn't used in pydobotlab.)
-* **Param layout** — what the host sends. Every multi-byte field is little-endian. `–` means no params.
+* **Cmd ID** - decimal protocol ID. See the [Command ID table](command-ids.md) for the symbol name.
+* **Ctrl** - `0x00` read-immediate, `0x01` write-immediate, `0x03` write-queued. (`0x02` read-queued isn't used in pydobotlab.)
+* **Param layout** - what the host sends. Every multi-byte field is little-endian. `–` means no params.
 
-When the response is a queued command, the response body is always a single `u64` queue index — that's the integer pydobotlab returns to your script.
+When the response is a queued command, the response body is always a single `u64` queue index - that's the integer pydobotlab returns to your script.

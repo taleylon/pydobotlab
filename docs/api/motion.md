@@ -1,6 +1,6 @@
 # Pose & motion
 
-Methods that read the current pose and queue trajectory motions (PTP — point-to-point — and HOME).
+Methods that read the current pose and queue trajectory motions (PTP - point-to-point - and HOME).
 
 ---
 
@@ -15,13 +15,36 @@ Methods that read the current pose and queue trajectory motions (PTP — point-t
 | `j1, j2, j3, j4` | `float` | Individual joint angles (degrees). |
 | `joints` *(property)* | `list[float]` | `[j1, j2, j3, j4]`. |
 
-You can iterate the Cartesian part directly:
+Print a readable summary of the coordinates and joint angles:
 
 ```python
-x, y, z, r = bot.get_pose()  # iterator yields x, y, z, r, j1..j4 — first 4 unpack here
+pose = bot.get_pose()
+print(pose)
 ```
 
-…or use `pose.as_xyzr()` / `pose.as_joints()` to pull out just the Cartesian or just the joints.
+For example (illustrative values):
+
+```text
+Pose(x=220.00, y=0.00, z=50.00, r=0.00, joints=[0.00, 30.00, 45.00, 0.00])
+```
+
+`Pose.__str__` formats values to two decimal places for display. The attributes
+retain their full precision. Positions are in millimetres; `r` and the joint
+angles are in degrees.
+
+Use `as_xyzr()` to unpack only the Cartesian coordinates, including rotation:
+
+```python
+x, y, z, r = pose.as_xyzr()
+```
+
+Iteration matches DobotLab's five-item return shape, with the joints as one list:
+
+```python
+x, y, z, r, joints = pose
+```
+
+Use `pose.as_joints()` for just the four joint angles as a tuple.
 
 ---
 
@@ -52,11 +75,11 @@ x, y, z, r = bot.get_pose()  # iterator yields x, y, z, r, j1..j4 — first 4 un
 | `timeout` | `float \| None` | `30.0` | Seconds to wait before giving up (only relevant when `wait=True`). `None` = wait forever. |
 | `raise_on_alarm` | `bool` | `True` | While waiting, raise [`DobotKinematicError`](errors.md#dobotkinematicerror-extends-dobotalarmerror) the moment a motion alarm fires (faster than waiting for the timeout). |
 
-**Returns.** `int` — the queued-command index assigned by the firmware.
+**Returns.** `int` - the queued-command index assigned by the firmware.
 
 **Raises.**
-* [`DobotKinematicError`](errors.md#dobotkinematicerror-extends-dobotalarmerror) — target outside the workspace, IK has no solution, or a joint limit is hit during the motion.
-* [`DobotTimeoutError`](errors.md#dobottimeouterror) — `timeout` elapsed before the queue executed the command.
+* [`DobotKinematicError`](errors.md#dobotkinematicerror-extends-dobotalarmerror) - target outside the workspace, IK has no solution, or a joint limit is hit during the motion.
+* [`DobotTimeoutError`](errors.md#dobottimeouterror) - `timeout` elapsed before the queue executed the command.
 
 **Protocol.** [`SET_PTP_CMD`](../protocol/command-ids.md) (84), write + queued. Param layout: `u8 mode | float32 x | float32 y | float32 z | float32 r` (17 bytes). Response: `u64 queueIndex`.
 
@@ -72,35 +95,35 @@ bot.move_to(200, 0, 50, 0, wait=False)  # fire-and-forget.
 
 ## `ptp(mode, x, y, z, r) -> int`
 
-**Purpose.** Lower-level form of `move_to()` — queue a PTP move without the convenience wrapping (no waiting, no alarm-watching). Use this when you want to enqueue a sequence of moves and only wait at the end (often inside [`with bot.batch():`](queue.md#batch-context-manager)).
+**Purpose.** Lower-level form of `move_to()` - queue a PTP move without the convenience wrapping (no waiting, no alarm-watching). Use this when you want to enqueue a sequence of moves and only wait at the end (often inside [`with bot.batch():`](queue.md#batch-context-manager)).
 
 **Inputs.** `mode` (int or `PTPMode`), then `x, y, z, r` floats.
 
 **Returns.** `int` queued-command index.
 
-**Protocol.** Same as [`move_to`](#move-to) — [`SET_PTP_CMD`](../protocol/command-ids.md) (84).
+**Protocol.** Same as [`move_to`](#move-to) - [`SET_PTP_CMD`](../protocol/command-ids.md) (84).
 
 ---
 
 ## `set_home(*, wait=True, timeout=60.0, raise_on_alarm=True) -> int`
 
-**Purpose.** Move the arm to its home position. The firmware does this in three internal stages (lift Z → swing base to home XY → descend), and re-zeroes any internal angle offsets along the way — which is why **`set_home()` also clears most alarms as a side-effect**.
+**Purpose.** Move the arm to its home position. The firmware does this in three internal stages (lift Z → swing base to home XY → descend), and re-zeroes any internal angle offsets along the way - which is why **`set_home()` also clears most alarms as a side-effect**.
 
 **Inputs.**
 
 | Arg | Type | Default | Meaning |
 |-----|------|---------|---------|
 | `wait` | `bool` | `True` | Block until home completes. |
-| `timeout` | `float \| None` | `60.0` | Seconds to wait. Home is slow — keep this generous. |
+| `timeout` | `float \| None` | `60.0` | Seconds to wait. Home is slow - keep this generous. |
 | `raise_on_alarm` | `bool` | `True` | Raise on motion alarms while waiting. |
 
 **Returns.** `int` queued-command index.
 
 **Raises.**
-* [`DobotKinematicError`](errors.md#dobotkinematicerror-extends-dobotalarmerror) — only fires if home itself is unreachable from the current pose (very unusual).
-* [`DobotTimeoutError`](errors.md#dobottimeouterror) — home didn't finish in time.
+* [`DobotKinematicError`](errors.md#dobotkinematicerror-extends-dobotalarmerror) - only fires if home itself is unreachable from the current pose (very unusual).
+* [`DobotTimeoutError`](errors.md#dobottimeouterror) - home didn't finish in time.
 
-**Protocol.** [`SET_HOME_CMD`](../protocol/command-ids.md) (31), write + queued. Param: `u32` (target XY mode, set to 0 in pydobotlab — fixed home). Response: `u64 queueIndex`.
+**Protocol.** [`SET_HOME_CMD`](../protocol/command-ids.md) (31), write + queued. Param: `u32` (target XY mode, set to 0 in pydobotlab - fixed home). Response: `u64 queueIndex`.
 
 **Note.** `home(...)` is kept as a deprecated alias.
 
@@ -110,7 +133,7 @@ bot.move_to(200, 0, 50, 0, wait=False)  # fire-and-forget.
 
 **Purpose.** Rotate the R axis (wrist) to `r` degrees without moving X/Y/Z.
 
-**Inputs.** `r: float` — target wrist angle in degrees.
+**Inputs.** `r: float` - target wrist angle in degrees.
 
 **Returns.** `int` queued-command index.
 
@@ -122,7 +145,7 @@ bot.move_to(200, 0, 50, 0, wait=False)  # fire-and-forget.
 
 **Purpose.** Queue one Continuous Path segment.
 
-Unlike a chain of PTP `MOVL_XYZ` moves, the firmware does **not** decelerate to zero between consecutive `cp()` calls — it blends them into a single smooth trajectory. This is the right tool for drawing, engraving, and any path where the small visible pauses of PTP-MOVL at every waypoint are undesirable.
+Unlike a chain of PTP `MOVL_XYZ` moves, the firmware does **not** decelerate to zero between consecutive `cp()` calls - it blends them into a single smooth trajectory. This is the right tool for drawing, engraving, and any path where the small visible pauses of PTP-MOVL at every waypoint are undesirable.
 
 **Inputs.**
 
@@ -138,7 +161,7 @@ Unlike a chain of PTP `MOVL_XYZ` moves, the firmware does **not** decelerate to 
 
 **Notes.** Call [`set_cp_params`](speed.md#set_cp_paramsplan_acc-junction_vel-acc00-real_time_trackfalse-int) once at the start of your program to tune corner smoothness. Without it, the firmware uses a conservative default and corners look rounded.
 
-**Example — drawing a circle with no per-segment pause:**
+**Example - drawing a circle with no per-segment pause:**
 
 ```python
 import math
@@ -194,7 +217,7 @@ The `PTPMode` enum (`from pydobotlab import PTPMode`) selects how the firmware i
 
 | Member         | Value | Target frame | Trajectory |
 |----------------|-------|--------------|------------|
-| `JUMP_XYZ`     | 0     | Cartesian    | Lift up to JUMP height, fly across, drop down — pick-and-place style. |
+| `JUMP_XYZ`     | 0     | Cartesian    | Lift up to JUMP height, fly across, drop down - pick-and-place style. |
 | `MOVJ_XYZ`     | 1     | Cartesian    | Joint-interpolated (smooth in joint space, curved in Cartesian). |
 | `MOVL_XYZ`     | 2     | Cartesian    | Linear in Cartesian (straight line). |
 | `JUMP_ANGLE`   | 3     | Joint        | Same as `JUMP_XYZ` but target is `j1..j4`. |

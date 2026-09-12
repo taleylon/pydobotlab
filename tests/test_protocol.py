@@ -1,7 +1,7 @@
 """Hardware-free tests for the wire protocol.
 
 Run with ``pytest`` from the package root. None of these tests require an
-attached Dobot — they exercise the byte-level packer, unpacker, and reader.
+attached Dobot - they exercise the byte-level packer, unpacker, and reader.
 """
 
 from __future__ import annotations

@@ -34,7 +34,7 @@ with Dobot() as bot:
     x, y, z, r, joints = bot.get_pose()  # GitBook tuple shape
     print(f"\nauto-picked {bot.port}, pose=({x:.1f}, {y:.1f}, {z:.1f}, {r:.1f}); joints={joints}")
 
-# 3b. Explicit port — auto-pick is bypassed.
+# 3b. Explicit port - auto-pick is bypassed.
 try:
     with Dobot("/dev/ttyUSB0") as bot:
         print(f"explicit /dev/ttyUSB0, pose = {tuple(bot.get_pose())}")

@@ -2,8 +2,8 @@
 
 The public method names and signatures match the official **DobotLab Coding
 Manual**'s "Dobot Magician" section exactly (3.6.1 - 3.6.28). Where DobotLab
-itself doesn't expose something useful — batched/lazy queue execution,
-real-time pose streaming, structured alarm sets, multi-arm — we add it on
+itself doesn't expose something useful - batched/lazy queue execution,
+real-time pose streaming, structured alarm sets, multi-arm - we add it on
 top, alongside the official surface.
 
 One :class:`Dobot` instance = one physical arm. Multi-arm choreography is
@@ -57,7 +57,7 @@ class Pose:
     Cartesian fields are millimetres / degrees; joint fields are degrees.
 
     Iterates as ``(x, y, z, r, jointAngle)`` to match the DobotLab official
-    return shape — so::
+    return shape - so::
 
         x, y, z, r, joints = bot.get_pose()
 
@@ -74,9 +74,17 @@ class Pose:
     j3: float
     j4: float
 
+    def __str__(self) -> str:
+        """Readable coordinates in mm and angles in degrees, rounded for display."""
+        joint_angles = ", ".join(f"{angle:.2f}" for angle in self.joints)
+        return (
+            f"Pose(x={self.x:.2f}, y={self.y:.2f}, z={self.z:.2f}, "
+            f"r={self.r:.2f}, joints=[{joint_angles}])"
+        )
+
     @property
     def joints(self) -> list[float]:
-        """``[j1, j2, j3, j4]`` — the ``jointAngle`` element of DobotLab's tuple."""
+        """``[j1, j2, j3, j4]`` - the ``jointAngle`` element of DobotLab's tuple."""
         return [self.j1, self.j2, self.j3, self.j4]
 
     def __iter__(self):
@@ -193,12 +201,12 @@ class Magician:
     ) -> None:
         """\
         ``via_broker``:
-            - ``"auto"`` (default) — at connect time, probe localhost for a
+            - ``"auto"`` (default) - at connect time, probe localhost for a
               running :class:`pydobotlab.broker.DobotBroker` and route through
               it if reachable. Otherwise open the serial port directly. This
               lets the control-panel GUI and a student script share an arm.
-            - ``True`` — require the broker; raise if unreachable.
-            - ``False`` — never use the broker (always direct serial).
+            - ``True`` - require the broker; raise if unreachable.
+            - ``False`` - never use the broker (always direct serial).
         """
         self._explicit_port = port
         self._baudrate = baudrate
@@ -426,7 +434,7 @@ class Magician:
     @jump_params.setter
     def jump_params(self, value: tuple[float, float]) -> None:
         zlimit, height = value
-        # Wire order is (jumpHeight, zLimit) — flip back.
+        # Wire order is (jumpHeight, zLimit) - flip back.
         self.queue_command(
             CommandID.GET_SET_PTP_JUMP_PARAMS,
             pack_floats(float(height), float(zlimit)),
@@ -461,14 +469,14 @@ class Magician:
 
     # ---- 3.6.11  Get Digital Signal -----------------------------------
     def get_di(self, io) -> int:
-        """Read digital input ``io`` — returns 0 (low) or 1 (high)."""
+        """Read digital input ``io`` - returns 0 (low) or 1 (high)."""
         port = parse_io_port(io)
         frame = self.read_command(CommandID.GET_IO_DI, pack_u8(port))
         return int(frame.params[1])
 
     # ---- 3.6.12  Get Analog Signal ------------------------------------
     def get_adc(self, io) -> int:
-        """Read analog input ``io`` — returns 0..4095."""
+        """Read analog input ``io`` - returns 0..4095."""
         port = parse_io_port(io)
         frame = self.read_command(CommandID.GET_IO_ADC, pack_u8(port))
         return struct.unpack("<H", frame.params[1:3])[0]
@@ -569,7 +577,7 @@ class Magician:
 
         When ``verify=True``, re-reads the alarm bitmask after a brief
         settle delay and raises :class:`DobotAlarmError` if any motion
-        alarm is *still* set — the firmware honoured the clear, but the
+        alarm is *still* set - the firmware honoured the clear, but the
         underlying physical condition (joint still mashed against a limit,
         sensor still faulting, etc.) reasserted it immediately. The
         student needs to fix the *physical* condition first (jog away from
@@ -591,7 +599,7 @@ class Magician:
             raise DobotAlarmError(
                 alarms=[name for _, name, _ in persistent],
                 message=(
-                    "alarm reasserted itself after clear — the physical "
+                    "alarm reasserted itself after clear - the physical "
                     "condition is still active:\n  - " + "\n  - ".join(lines)
                 ),
             )
@@ -676,7 +684,7 @@ class Magician:
 
     # ---- Continuous Path (CP) ----------------------------------------
     # CP is in the firmware protocol (cmd IDs 90/91) but DobotLab's
-    # Python wrapper doesn't expose it in section 3.6 — every PTP
+    # Python wrapper doesn't expose it in section 3.6 - every PTP
     # MOVL_XYZ trajectory there decelerates to zero between segments,
     # which produces visible pauses when drawing. pydobotlab adds cp()
     # so a chain of segments blends into one smooth trajectory.
@@ -691,7 +699,7 @@ class Magician:
         """Tune Continuous Path execution.
 
         CP is the firmware's "blend consecutive moves into one smooth
-        trajectory" mode — exactly what you want for drawing, engraving,
+        trajectory" mode - exactly what you want for drawing, engraving,
         or any path where PTP's deceleration-to-zero between segments is
         the wrong behaviour. ``cp()`` queues each segment; the firmware
         looks ahead in the queue to compute corner velocities.
@@ -730,7 +738,7 @@ class Magician:
         """Queue one Continuous Path segment.
 
         Unlike a chain of PTP MOVL_XYZ moves, the arm does NOT decelerate
-        to zero between consecutive ``cp()`` calls — the firmware blends
+        to zero between consecutive ``cp()`` calls - the firmware blends
         them into a single smooth trajectory. This is what gives a drawn
         line a clean visual flow instead of the visible little pauses
         DobotLab shows on a per-PTP-segment program.
@@ -789,8 +797,8 @@ class Magician:
     ) -> int:
         """Queue a PTP move and (by default) block until it completes.
 
-        If the firmware refuses the target — typically because it's outside
-        the arm's reachable workspace — :class:`DobotKinematicError` is
+        If the firmware refuses the target - typically because it's outside
+        the arm's reachable workspace - :class:`DobotKinematicError` is
         raised. To retry, call :meth:`clear_alarm` first.
         """
         index = self.ptp(int(mode), x, y, z, r)
@@ -803,7 +811,7 @@ class Magician:
         """Start (or stop) a JOG using an IMMEDIATE frame.
 
         Sent immediate (not queued) so the IDLE-on-release reaches the
-        firmware even when the queue is paused — which it is during an
+        firmware even when the queue is paused - which it is during an
         active alarm. If the panel sends a queued JOG-IDLE while the queue
         is paused, the IDLE sits unexecuted and the arm keeps moving
         forever. Immediate frames bypass the queue entirely.
@@ -816,7 +824,7 @@ class Magician:
         try:
             self.jog(JOGCmd.IDLE)
         except (DobotConnectionError, DobotTimeoutError):
-            # One retry — the arm is still moving and we MUST stop it.
+            # One retry - the arm is still moving and we MUST stop it.
             try:
                 self.jog(JOGCmd.IDLE)
             except Exception:
@@ -867,7 +875,7 @@ class Magician:
             if raise_on_alarm:
                 active = self.get_alarms()
                 # Any alarm bit in the motion-related byte ranges (planning,
-                # kinematic, over-speed, joint-limit, lost-step, other —
+                # kinematic, over-speed, joint-limit, lost-step, other -
                 # codes 0x10..0x77) means the firmware refused or aborted a
                 # motion. Includes named codes AND unmapped bits in those
                 # bands so an unknown joint-limit on a firmware variant

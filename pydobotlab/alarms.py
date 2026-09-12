@@ -73,55 +73,55 @@ class Alarm(IntEnum):
 # what went wrong AND what to do about it without leaving the IDE.
 _TROUBLESHOOT: dict[Alarm, str] = {
     # System / public faults
-    Alarm.PUBLIC_RESET: "the arm was reset — call set_home() before continuing",
-    Alarm.PUBLIC_UNDEFINED_INSTRUCTION: "received an unknown command — check firmware version vs. pydobotlab version",
-    Alarm.PUBLIC_FILE_SYSTEM: "internal file-system error — power-cycle the arm",
-    Alarm.PUBLIC_MCU_COMM: "internal MCU communication failure — power-cycle the arm",
-    Alarm.PUBLIC_ANGLE_SENSOR_READ: "couldn't read an angle sensor — check the cables, re-home",
+    Alarm.PUBLIC_RESET: "the arm was reset - call set_home() before continuing",
+    Alarm.PUBLIC_UNDEFINED_INSTRUCTION: "received an unknown command - check firmware version vs. pydobotlab version",
+    Alarm.PUBLIC_FILE_SYSTEM: "internal file-system error - power-cycle the arm",
+    Alarm.PUBLIC_MCU_COMM: "internal MCU communication failure - power-cycle the arm",
+    Alarm.PUBLIC_ANGLE_SENSOR_READ: "couldn't read an angle sensor - check the cables, re-home",
     # Planning
-    Alarm.PLAN_INVERSE_RESOLVE: "IK couldn't find a solution — pick a reachable target",
-    Alarm.PLAN_INVERSE_LIMIT: "IK solution hits a joint limit — try a different target or R angle",
-    Alarm.PLAN_DATA_REPEAT: "duplicate planning data — clear_queue() then retry",
-    Alarm.PLAN_CURRENT_JOINT_OUT_OF_RANGE: "current pose is past a joint limit — jog back into range, then clear_alarm()",
-    Alarm.PLAN_MOTION_TARGET_OUT_OF_WORKSPACE: "target is outside the arm's reach — pick coordinates inside the workspace",
-    Alarm.PLAN_IN_SINGULARITY_ZONE: "trajectory enters a singularity — route via an intermediate waypoint",
+    Alarm.PLAN_INVERSE_RESOLVE: "IK couldn't find a solution - pick a reachable target",
+    Alarm.PLAN_INVERSE_LIMIT: "IK solution hits a joint limit - try a different target or R angle",
+    Alarm.PLAN_DATA_REPEAT: "duplicate planning data - clear_queue() then retry",
+    Alarm.PLAN_CURRENT_JOINT_OUT_OF_RANGE: "current pose is past a joint limit - jog back into range, then clear_alarm()",
+    Alarm.PLAN_MOTION_TARGET_OUT_OF_WORKSPACE: "target is outside the arm's reach - pick coordinates inside the workspace",
+    Alarm.PLAN_IN_SINGULARITY_ZONE: "trajectory enters a singularity - route via an intermediate waypoint",
     # Kinematic
-    Alarm.KINEMATIC_SINGULARITY: "kinematic singularity — route via an intermediate waypoint",
-    Alarm.KINEMATIC_TARGET_OUT_OF_WORKSPACE: "target outside the workspace — pick reachable coordinates",
-    Alarm.KINEMATIC_INVERSE_LIMIT: "IK hit a joint limit — try a different target or R angle",
+    Alarm.KINEMATIC_SINGULARITY: "kinematic singularity - route via an intermediate waypoint",
+    Alarm.KINEMATIC_TARGET_OUT_OF_WORKSPACE: "target outside the workspace - pick reachable coordinates",
+    Alarm.KINEMATIC_INVERSE_LIMIT: "IK hit a joint limit - try a different target or R angle",
     # Overspeed
-    Alarm.OVERSPEED_J1: "joint 1 over speed — lower motion_params (e.g. 30, 30)",
-    Alarm.OVERSPEED_J2: "joint 2 over speed — lower motion_params (e.g. 30, 30)",
-    Alarm.OVERSPEED_J3: "joint 3 over speed — lower motion_params (e.g. 30, 30)",
-    Alarm.OVERSPEED_J4: "joint 4 over speed — lower motion_params (e.g. 30, 30)",
+    Alarm.OVERSPEED_J1: "joint 1 over speed - lower motion_params (e.g. 30, 30)",
+    Alarm.OVERSPEED_J2: "joint 2 over speed - lower motion_params (e.g. 30, 30)",
+    Alarm.OVERSPEED_J3: "joint 3 over speed - lower motion_params (e.g. 30, 30)",
+    Alarm.OVERSPEED_J4: "joint 4 over speed - lower motion_params (e.g. 30, 30)",
     # Positive joint limits
-    Alarm.LIMIT_POS_J1: "joint 1 (base) hit positive limit — jog J1 negative, or call set_home()",
-    Alarm.LIMIT_POS_J2: "joint 2 (rear arm) hit positive limit — jog J2 negative, or call set_home()",
-    Alarm.LIMIT_POS_J3: "joint 3 (forearm) hit positive limit — jog Z down (or J3 negative), or call set_home()",
-    Alarm.LIMIT_POS_J4: "joint 4 (R) hit positive limit — jog R negative, or call set_home()",
+    Alarm.LIMIT_POS_J1: "joint 1 (base) hit positive limit - jog J1 negative, or call set_home()",
+    Alarm.LIMIT_POS_J2: "joint 2 (rear arm) hit positive limit - jog J2 negative, or call set_home()",
+    Alarm.LIMIT_POS_J3: "joint 3 (forearm) hit positive limit - jog Z down (or J3 negative), or call set_home()",
+    Alarm.LIMIT_POS_J4: "joint 4 (R) hit positive limit - jog R negative, or call set_home()",
     # Negative joint limits
-    Alarm.LIMIT_NEG_J1: "joint 1 (base) hit negative limit — jog J1 positive, or call set_home()",
-    Alarm.LIMIT_NEG_J2: "joint 2 (rear arm) hit negative limit — jog J2 positive, or call set_home()",
-    Alarm.LIMIT_NEG_J3: "joint 3 (forearm) hit negative limit — jog Z up (or J3 positive), or call set_home()",
-    Alarm.LIMIT_NEG_J4: "joint 4 (R) hit negative limit — jog R positive, or call set_home()",
+    Alarm.LIMIT_NEG_J1: "joint 1 (base) hit negative limit - jog J1 positive, or call set_home()",
+    Alarm.LIMIT_NEG_J2: "joint 2 (rear arm) hit negative limit - jog J2 positive, or call set_home()",
+    Alarm.LIMIT_NEG_J3: "joint 3 (forearm) hit negative limit - jog Z up (or J3 positive), or call set_home()",
+    Alarm.LIMIT_NEG_J4: "joint 4 (R) hit negative limit - jog R positive, or call set_home()",
     # Lost step
-    Alarm.LOST_STEP_J1: "joint 1 lost step — re-home the arm to recalibrate",
-    Alarm.LOST_STEP_J2: "joint 2 lost step — re-home the arm to recalibrate",
-    Alarm.LOST_STEP_J3: "joint 3 lost step — re-home the arm to recalibrate",
-    Alarm.LOST_STEP_J4: "joint 4 lost step — re-home the arm to recalibrate",
+    Alarm.LOST_STEP_J1: "joint 1 lost step - re-home the arm to recalibrate",
+    Alarm.LOST_STEP_J2: "joint 2 lost step - re-home the arm to recalibrate",
+    Alarm.LOST_STEP_J3: "joint 3 lost step - re-home the arm to recalibrate",
+    Alarm.LOST_STEP_J4: "joint 4 lost step - re-home the arm to recalibrate",
     # Other
-    Alarm.OTHER_LIMIT_TRIGGERED_J1_J2: "auto-leveling limit switch tripped — jog away from it, then clear_alarm()",
+    Alarm.OTHER_LIMIT_TRIGGERED_J1_J2: "auto-leveling limit switch tripped - jog away from it, then clear_alarm()",
 }
 
 # Generic per-band fallbacks for unmapped codes (firmware variants, etc.)
 _BAND_TROUBLESHOOT: dict[int, str] = {
-    0x00: "system fault — power-cycle the arm",
-    0x10: "planning failed — pick a reachable target",
-    0x20: "kinematic failure — pick a reachable target",
-    0x30: "joint over-speed — lower motion_params (try 30, 30)",
-    0x40: "joint hit positive limit — jog the joint in the negative direction, or call set_home()",
-    0x50: "joint hit negative limit — jog the joint in the positive direction, or call set_home()",
-    0x60: "lost step — re-home the arm to recalibrate",
+    0x00: "system fault - power-cycle the arm",
+    0x10: "planning failed - pick a reachable target",
+    0x20: "kinematic failure - pick a reachable target",
+    0x30: "joint over-speed - lower motion_params (try 30, 30)",
+    0x40: "joint hit positive limit - jog the joint in the negative direction, or call set_home()",
+    0x50: "joint hit negative limit - jog the joint in the positive direction, or call set_home()",
+    0x60: "lost step - re-home the arm to recalibrate",
     0x70: "see the firmware manual for details",
 }
 
@@ -172,7 +172,7 @@ class AlarmSet:
         return item in self.alarms
 
     def names(self) -> list[str]:
-        """Names for active alarms — useful for logging.
+        """Names for active alarms - useful for logging.
 
         Unmapped codes are still given a meaningful label based on the
         byte range they sit in (joint-limit, overspeed, lost-step, ...)
@@ -197,7 +197,7 @@ class AlarmSet:
 
         Used by both the panel banner and the
         :class:`~pydobotlab.errors.DobotKinematicError` message so the student
-        sees not just *what* tripped but *what to do about it* — without
+        sees not just *what* tripped but *what to do about it* - without
         leaving the IDE or the panel window.
         """
         out: list[str] = []
@@ -215,7 +215,7 @@ class AlarmSet:
 
 def decode_alarms(raw: bytes) -> AlarmSet:
     """Decode the 16-byte alarm bitmask returned by ``GetAlarmsState``."""
-    # Pad/truncate defensively — real firmware always sends 16 bytes.
+    # Pad/truncate defensively - real firmware always sends 16 bytes.
     raw16 = bytes(raw[:16]).ljust(16, b"\x00")
     active: list[Alarm | int] = []
     for byte_index, byte in enumerate(raw16):
@@ -232,7 +232,7 @@ def decode_alarms(raw: bytes) -> AlarmSet:
 
 
 def encode_alarms(alarms: Iterable[Alarm | int]) -> bytes:
-    """Inverse of :func:`decode_alarms` — mostly useful for tests."""
+    """Inverse of :func:`decode_alarms` - mostly useful for tests."""
     mask = bytearray(16)
     for a in alarms:
         code = int(a)

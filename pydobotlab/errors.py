@@ -43,13 +43,13 @@ class DobotKinematicError(DobotAlarmError):
     :meth:`Dobot.wait_for`, :meth:`Dobot.wait_idle` (and any other waiter)
     when one of the well-known motion-failure alarms fires:
 
-    * ``PLAN_INVERSE_RESOLVE`` — IK solver couldn't find a solution.
-    * ``PLAN_MOTION_TARGET_OUT_OF_WORKSPACE`` — target outside reach.
-    * ``KINEMATIC_TARGET_OUT_OF_WORKSPACE`` — same, kinematic side.
-    * ``PLAN_INVERSE_LIMIT`` / ``KINEMATIC_INVERSE_LIMIT`` — IK hit a joint limit.
-    * ``PLAN_IN_SINGULARITY_ZONE`` / ``KINEMATIC_SINGULARITY`` — singular.
-    * ``PLAN_CURRENT_JOINT_OUT_OF_RANGE`` — start pose already off-range.
-    * ``LIMIT_POS_J*`` / ``LIMIT_NEG_J*`` — joint limit struck mid-motion.
+    * ``PLAN_INVERSE_RESOLVE`` - IK solver couldn't find a solution.
+    * ``PLAN_MOTION_TARGET_OUT_OF_WORKSPACE`` - target outside reach.
+    * ``KINEMATIC_TARGET_OUT_OF_WORKSPACE`` - same, kinematic side.
+    * ``PLAN_INVERSE_LIMIT`` / ``KINEMATIC_INVERSE_LIMIT`` - IK hit a joint limit.
+    * ``PLAN_IN_SINGULARITY_ZONE`` / ``KINEMATIC_SINGULARITY`` - singular.
+    * ``PLAN_CURRENT_JOINT_OUT_OF_RANGE`` - start pose already off-range.
+    * ``LIMIT_POS_J*`` / ``LIMIT_NEG_J*`` - joint limit struck mid-motion.
 
     To recover, the student must call :meth:`Dobot.clear_alarm` (the panel's
     "Clear Alarm" button does the same thing). Any motion command that

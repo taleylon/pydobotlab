@@ -1,4 +1,4 @@
-"""pydobotlab.panel — PySide6 control-panel GUI for the Dobot Magician.
+"""pydobotlab.panel - PySide6 control-panel GUI for the Dobot Magician.
 
 Drop-in DobotLab replacement for the right-hand "Arm Control Panel" view:
 device hub + per-arm control window with jog pads, end-effector tabs,

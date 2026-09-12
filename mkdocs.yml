@@ -1,5 +1,5 @@
 site_name: pydobotlab
-site_description: Python control for the Dobot Magician — user guide and API reference.
+site_description: Python control for the Dobot Magician - user guide and API reference.
 site_author: Tal Eylon
 site_url: https://taleylon.github.io/pydobotlab/
 repo_url: https://github.com/taleylon/pydobotlab

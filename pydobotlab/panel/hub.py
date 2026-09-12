@@ -1,4 +1,4 @@
-"""HubWindow — small device picker that spawns per-arm ControlPanel windows.
+"""HubWindow - small device picker that spawns per-arm ControlPanel windows.
 
 Closing the hub closes the whole app; closing a panel only disconnects that
 arm and lets the user re-open it from the hub later.
@@ -30,7 +30,7 @@ class DiscoveryWorker(QThread):
     """Runs Discovery.discover_with_diagnostics() off the GUI thread.
 
     We use the diagnostic form so the hub can surface ports we *tried* but
-    couldn't open — e.g. a /dev/ttyACM0 the current user can't access. The
+    couldn't open - e.g. a /dev/ttyACM0 the current user can't access. The
     plain discover() would drop them silently and the user gets a useless
     "no Dobots found" with no hint to try `sudo usermod -aG dialout $USER`.
     """
@@ -51,7 +51,7 @@ class HubWindow(QMainWindow):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("pydobotlab — devices")
+        self.setWindowTitle("pydobotlab - devices")
         self.resize(560, 380)
 
         self._panels: dict[str, ControlPanel] = {}  # port -> panel
@@ -124,9 +124,9 @@ class HubWindow(QMainWindow):
                 self._device_list.addItem(header)
                 for failure in failures:
                     hint = {
-                        "permission": "permission denied — try "
+                        "permission": "permission denied - try "
                         "'sudo usermod -aG dialout $USER' then log out & back in",
-                        "busy": "port busy — close DobotStudio, another panel, "
+                        "busy": "port busy - close DobotStudio, another panel, "
                         "or stop brltty: 'sudo systemctl stop brltty'",
                         "no_reply": "opened but didn't answer (wrong device, or arm asleep)",
                         "other": "couldn't open",
@@ -137,7 +137,7 @@ class HubWindow(QMainWindow):
                     item.setToolTip(failure.detail)
                     self._device_list.addItem(item)
                 self.statusBar().showMessage(
-                    f"no Dobots answered; {len(failures)} port(s) tried — hover for details", 6000
+                    f"no Dobots answered; {len(failures)} port(s) tried - hover for details", 6000
                 )
             else:
                 empty = QListWidgetItem("No Dobots found. Check the USB cable, then click Refresh.")

@@ -1,32 +1,32 @@
-"""Draw a smiley face — showcase the eager → lazy → continuous progression.
+"""Draw a smiley face - showcase the eager → lazy → continuous progression.
 
 The same drawing is run THREE ways, back to back, so the speed-up and the
 visual smoothness improvement are both directly comparable:
 
-  EAGER       — one blocking ``move_to`` per segment. Each call is a
+  EAGER       - one blocking ``move_to`` per segment. Each call is a
                 Python<->arm round-trip plus a wait-for-completion poll.
                 The arm visibly hesitates between segments and the
                 wall-clock is dominated by the I/O ping-pong.
 
-  LAZY (PTP)  — wrap the whole drawing in ``with bot.batch():``. Every
+  LAZY (PTP)  - wrap the whole drawing in ``with bot.batch():``. Every
                 ``ptp(MOVL_XYZ, ...)`` is appended to the firmware queue
                 without running it; on block exit the firmware drains the
                 whole queue as one program. No more per-segment Python
-                round-trip — but the firmware still treats each MOVL
+                round-trip - but the firmware still treats each MOVL
                 segment as an independent trajectory that decelerates to
                 zero before the next starts, so on close inspection you
                 still see a tiny pause at every waypoint.
 
-  CONTINUOUS  — same batched queue, but the actual drawing strokes use
+  CONTINUOUS  - same batched queue, but the actual drawing strokes use
                 ``cp()`` (Continuous Path, cmd 91) instead of MOVL_XYZ.
                 The firmware blends consecutive CP segments into a
-                single smooth trajectory — the arm does NOT decelerate
+                single smooth trajectory - the arm does NOT decelerate
                 between waypoints. This is the right tool for drawing.
 
 The script also **pre-validates the entire path** against a conservative
 workspace envelope before sending any frame. The Magician's parallelogram
 linkage forbids targets too close to the base column even when the
-cylindrical radius would suggest they're reachable — the geometry below
+cylindrical radius would suggest they're reachable - the geometry below
 sits comfortably outside that no-fly zone. If you change ``CENTER_X``,
 ``FACE_RADIUS`` etc. and your edit pushes a point out, the pre-check
 prints exactly which waypoint is bad and aborts before the arm moves.
@@ -54,11 +54,11 @@ from pydobotlab import Magician, PTPMode
 from pydobotlab.errors import DobotAlarmError
 
 # ---------------------------------------------------------------------------
-# Geometry — millimetres, degrees.
+# Geometry - millimetres, degrees.
 #
 # Defaults chosen so the entire smiley sits inside the Magician's reachable
 # annulus on real hardware (NOT just inside the simulator's cylindrical
-# bounds — the parallelogram linkage has a "no-fly" interior even within
+# bounds - the parallelogram linkage has a "no-fly" interior even within
 # the nominal radius). Closest point is (190, 0) ≈ 190 mm from the base;
 # farthest is (290, 0) ≈ 290 mm. Both well clear of the limits.
 # ---------------------------------------------------------------------------
@@ -83,14 +83,14 @@ DRAW_VELOCITY = 80.0
 
 
 # ---------------------------------------------------------------------------
-# Workspace envelope used by the pre-check. Conservative — strictly inside
+# Workspace envelope used by the pre-check. Conservative - strictly inside
 # the firmware's actual envelope so we leave a small safety margin. Tweak
 # WORKSPACE if your specific Magician has a different reach.
 # ---------------------------------------------------------------------------
 
 WORKSPACE = {
     # The Magician's parallelogram-arm "no-fly zone" extends quite a bit
-    # further out than the nominal cylindrical inner radius — real-hardware
+    # further out than the nominal cylindrical inner radius - real-hardware
     # testing showed an old smiley centred at (220, 0) with R=60 (closest
     # point: 160 mm) failed mid-stroke. 180 mm is a safe lower bound on
     # standard educational kits. If your specific arm reaches closer in,
@@ -215,7 +215,7 @@ def n_segments() -> int:
 
 
 def draw_eager(bot: Magician) -> None:
-    """Each segment is a blocking move_to() — slow, with visible hiccups."""
+    """Each segment is a blocking move_to() - slow, with visible hiccups."""
     for stroke in all_strokes():
         x0, y0 = stroke[0]
         bot.move_to(x0, y0, Z_TRAVEL, 0.0, mode=PTPMode.MOVJ_XYZ)
@@ -262,7 +262,7 @@ def draw_continuous(bot: Magician) -> None:
     n = n_segments()
     bot.set_cp_params(plan_acc=200.0, junction_vel=200.0, acc=200.0)
 
-    print(f"  [cp] stacking ~{n} segments (cp() blends them — no per-segment pause)...")
+    print(f"  [cp] stacking ~{n} segments (cp() blends them - no per-segment pause)...")
     t_stack0 = time.monotonic()
 
     with bot.batch():
@@ -300,7 +300,7 @@ def verify_clean(bot: Magician, run_label: str) -> bool:
     for line in alarms.format():
         print(f"       • {line}")
     print(
-        "  [!!] the drawing is INCOMPLETE — calling clear_alarm() so the next run can start clean."
+        "  [!!] the drawing is INCOMPLETE - calling clear_alarm() so the next run can start clean."
     )
     try:
         bot.clear_alarm()
@@ -329,7 +329,7 @@ def main() -> int:
     parser.add_argument(
         "--skip-home",
         action="store_true",
-        help="skip the initial set_home() — useful when re-running tests "
+        help="skip the initial set_home() - useful when re-running tests "
         "back to back and the arm is already calibrated.",
     )
     parser.add_argument(
@@ -342,7 +342,7 @@ def main() -> int:
     port = args.port_flag or args.port_positional
 
     # 1. Pre-check the geometry BEFORE opening the port. If the geometry is
-    #    wrong, we don't even want to home — fail fast with the bad point.
+    #    wrong, we don't even want to home - fail fast with the bad point.
     waypoints = all_waypoints()
     print(f"validating {len(waypoints)} waypoints against the workspace envelope...")
     try:
@@ -418,10 +418,10 @@ def main() -> int:
         print()
         all_ok = all(run_results.values()) if run_results else False
         if all_ok:
-            print("smiley complete — all runs finished with no active alarms.")
+            print("smiley complete - all runs finished with no active alarms.")
             return 0
         failed = [name for name, ok in run_results.items() if not ok]
-        print(f"smiley INCOMPLETE — runs with active alarms: {failed}")
+        print(f"smiley INCOMPLETE - runs with active alarms: {failed}")
         print(
             "  Most likely cause: a waypoint just outside the firmware's "
             "reachable zone. Try moving CENTER_X further from the base or "

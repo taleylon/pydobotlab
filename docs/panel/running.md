@@ -31,7 +31,7 @@ So:
 # real hardware, default settings
 pydobotlab-panel
 
-# no robots needed — try out the GUI fully
+# no robots needed - try out the GUI fully
 pydobotlab-panel --simulator --arms 3
 
 # share an existing broker on a non-default port
@@ -51,7 +51,7 @@ On window close, the panel does the inverse and (via the broker's reference coun
 
 ## Sharing the arm with a script
 
-While the panel is open, just run your script — `Magician(port=...)` will detect the broker and route through it. No code change needed.
+While the panel is open, just run your script - `Magician(port=...)` will detect the broker and route through it. No code change needed.
 
 ```bash
 # Terminal 1
@@ -83,6 +83,6 @@ open_panel(bot_b)
 
 ## Troubleshooting
 
-* **Panel says "no Dobots found"** — same as `discover()` returning `[]`. Check `python -m serial.tools.list_ports`. If you see the arm but the panel doesn't, set `KNOWN_DOBOT_USB_IDS.add(...)` for your adapter (see [Discovery](../api/discovery.md#known_dobot_usb_ids)).
-* **"port in use" when launching panel after a script crashed** — kill the orphaned Python process or reboot the arm. Defensive: pydobotlab opens the port `exclusive=True` on Linux so leaks are rare.
-* **Panel closes but the broker keeps the arm open** — fixed in current pydobotlab via per-port reference counting (see [The DobotBroker](broker.md)).
+* **Panel says "no Dobots found"** - same as `discover()` returning `[]`. Check `python -m serial.tools.list_ports`. If you see the arm but the panel doesn't, set `KNOWN_DOBOT_USB_IDS.add(...)` for your adapter (see [Discovery](../api/discovery.md#known_dobot_usb_ids)).
+* **"port in use" when launching panel after a script crashed** - kill the orphaned Python process or reboot the arm. Defensive: pydobotlab opens the port `exclusive=True` on Linux so leaks are rare.
+* **Panel closes but the broker keeps the arm open** - fixed in current pydobotlab via per-port reference counting (see [The DobotBroker](broker.md)).

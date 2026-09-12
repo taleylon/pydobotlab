@@ -41,7 +41,7 @@ If you want the **control panel GUI** (recommended for students), install the GU
 python -m pip install "pydobotlab[gui]"
 ```
 
-The library itself works without PySide6 — it's only required for the panel.
+The library itself works without PySide6 - it's only required for the panel.
 
 ## Verify the install
 
@@ -55,8 +55,8 @@ Should print a version number (e.g. `0.1.0`).
 
 Plug a real Magician into a USB port and check that your OS can see it:
 
-* **macOS / Linux**: `ls /dev/tty.usbserial-* /dev/ttyUSB* /dev/ttyACM*` — you should see the device. Note: on Ubuntu the Magician often shows up as `/dev/ttyACM0` (the CDC ACM driver) rather than `/dev/ttyUSB0`; both work. See [Linux setup](linux.md) for the dialout/brltty fixes you'll need first.
-* **Windows**: open Device Manager → Ports (COM & LPT) — note the COM number (e.g. `COM3`).
+* **macOS / Linux**: `ls /dev/tty.usbserial-* /dev/ttyUSB* /dev/ttyACM*` - you should see the device. Note: on Ubuntu the Magician often shows up as `/dev/ttyACM0` (the CDC ACM driver) rather than `/dev/ttyUSB0`; both work. See [Linux setup](linux.md) for the dialout/brltty fixes you'll need first.
+* **Windows**: open Device Manager → Ports (COM & LPT) - note the COM number (e.g. `COM3`).
 
 If you don't have a real arm yet, the [simulator](simulator.md) lets you run everything in this guide without one.
 

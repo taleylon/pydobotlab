@@ -1,6 +1,6 @@
 """Tests for the in-process port registry and the post-refactor surface.
 
-These never touch real serial hardware — they poke the module-level set
+These never touch real serial hardware - they poke the module-level set
 through the public functions and assert behaviour. Also asserts the API
 shape after the discovery refactor (methods removed from Dobot, moved to
 pydobotlab.discovery).
@@ -156,7 +156,7 @@ def test_discovery_namespace_class_exposes_all_functions():
 
 
 def test_dobot_constructor_defaults_port_to_none():
-    """Auto-pick is the default — no positional port argument required."""
+    """Auto-pick is the default - no positional port argument required."""
     bot = Dobot()
     assert bot.port is None
     assert not bot.is_open

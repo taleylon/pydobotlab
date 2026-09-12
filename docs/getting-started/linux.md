@@ -1,6 +1,6 @@
 # Linux setup (Ubuntu / Debian)
 
-The Magician works the same on Linux as on Windows once a few OS-specific quirks are out of the way. If you've just plugged your arm into Ubuntu for the first time and `pydobotlab-panel` is showing "no Dobots found" — this page is for you.
+The Magician works the same on Linux as on Windows once a few OS-specific quirks are out of the way. If you've just plugged your arm into Ubuntu for the first time and `pydobotlab-panel` is showing "no Dobots found" - this page is for you.
 
 ## TL;DR
 
@@ -8,7 +8,7 @@ The Magician works the same on Linux as on Windows once a few OS-specific quirks
 # 1. Put yourself in the dialout group (one-time).
 sudo usermod -aG dialout $USER
 
-# 2. Stop the brltty daemon if it's installed — it grabs CDC/ACM devices.
+# 2. Stop the brltty daemon if it's installed - it grabs CDC/ACM devices.
 sudo systemctl stop brltty
 sudo systemctl mask brltty   # optional, prevents it from auto-starting
 
@@ -22,7 +22,7 @@ Then plug the arm back in, open a new shell, and run:
 ls /dev/ttyUSB* /dev/ttyACM* 2>/dev/null
 ```
 
-You should see one device. Either path works — the library is happy with both.
+You should see one device. Either path works - the library is happy with both.
 
 ## Why the arm sometimes appears as `/dev/ttyACM0` instead of `/dev/ttyUSB0`
 
@@ -46,13 +46,13 @@ udevadm info -q all -n /dev/ttyUSB0 2>/dev/null | grep -E 'ID_VENDOR|ID_MODEL|ID
 
 **Almost always: no.** Both relevant drivers have shipped in mainline Linux for over a decade and Ubuntu auto-loads them when the device appears. Specifically:
 
-* `ch341` — for Magicians whose USB cable has a WCH CH340 chip (the most common kit). In the kernel since 2.6.x.
-* `cdc_acm` — for Magicians that present as a USB CDC ACM device directly (newer revisions, no CH340 chip). In the kernel since the earliest days.
+* `ch341` - for Magicians whose USB cable has a WCH CH340 chip (the most common kit). In the kernel since 2.6.x.
+* `cdc_acm` - for Magicians that present as a USB CDC ACM device directly (newer revisions, no CH340 chip). In the kernel since the earliest days.
 
 You'd only need to install something manually if either:
 
 1. You're on a stripped-down distro that ships without USB-serial modules (very rare), **or**
-2. You have a WCH chip revision newer than the one in the mainline driver (CH343 / CH9102 — *not* the standard CH340 in the Magician).
+2. You have a WCH chip revision newer than the one in the mainline driver (CH343 / CH9102 - *not* the standard CH340 in the Magician).
 
 For the Magician you should be in case (0): the driver is already on disk, the kernel auto-loaded it when you plugged the arm in, and the device showed up as `/dev/ttyUSB0` or `/dev/ttyACM0`.
 
@@ -99,13 +99,13 @@ sudo make install
 sudo modprobe ch341
 ```
 
-You will **not** need this for any Magician currently shipping. If you're tempted to try this because the panel can't find your arm, stop and re-check the `dialout` group and `brltty` first — those account for the overwhelming majority of "no Dobots found" reports on Linux.
+You will **not** need this for any Magician currently shipping. If you're tempted to try this because the panel can't find your arm, stop and re-check the `dialout` group and `brltty` first - those account for the overwhelming majority of "no Dobots found" reports on Linux.
 
 ## "Permission denied" on `/dev/ttyACM0` or `/dev/ttyUSB0`
 
-Linux serial devices are owned by the `dialout` group (Ubuntu, Debian) or `uucp` (Arch). You need to be a member, otherwise opening the device fails with `permission denied`. pydobotlab's panel will now show this explicitly — if you see a line like
+Linux serial devices are owned by the `dialout` group (Ubuntu, Debian) or `uucp` (Arch). You need to be a member, otherwise opening the device fails with `permission denied`. pydobotlab's panel will now show this explicitly - if you see a line like
 
-> `/dev/ttyACM0    permission denied — try 'sudo usermod -aG dialout $USER' then log out & back in`
+> `/dev/ttyACM0    permission denied - try 'sudo usermod -aG dialout $USER' then log out & back in`
 
 that's the fix:
 
@@ -116,13 +116,13 @@ sudo usermod -aG dialout $USER
 
 After re-login, verify with `groups | grep dialout`.
 
-## "Device or resource busy" — brltty hijacking
+## "Device or resource busy" - brltty hijacking
 
 `brltty` is a Braille display daemon shipped by default with Ubuntu Desktop. Many CDC/ACM devices (and a *lot* of microcontroller dev boards) match the heuristics it uses to recognise Braille terminals, so it grabs the device the instant you plug it in. The Magician is one of the affected devices.
 
 You'll see this in the panel as
 
-> `/dev/ttyACM0    port busy — close DobotStudio, another panel, or stop brltty: 'sudo systemctl stop brltty'`
+> `/dev/ttyACM0    port busy - close DobotStudio, another panel, or stop brltty: 'sudo systemctl stop brltty'`
 
 Fix:
 
@@ -166,7 +166,7 @@ python examples/smoke_test.py --port /dev/ttyACM0      # flag
 python examples/smoke_test.py -p /dev/ttyACM0          # short flag
 ```
 
-(If you only see the positional form in older scripts, you can update them the same way — the parser change is just `parser.add_argument("-p", "--port", ...)`.)
+(If you only see the positional form in older scripts, you can update them the same way - the parser change is just `parser.add_argument("-p", "--port", ...)`.)
 
 ## Diagnosing from Python
 
@@ -178,7 +178,7 @@ from pydobotlab import Discovery
 hits, failures = Discovery.discover_with_diagnostics()
 print("found:", hits)
 for f in failures:
-    print(f"  rejected {f.port}: {f.reason} — {f.detail}")
+    print(f"  rejected {f.port}: {f.reason} - {f.detail}")
 ```
 
 `failures` is a list of [`ProbeFailure`](../api/discovery.md#probefailure) records, each with `.port`, `.description`, `.reason` (`permission`, `busy`, `no_reply`, or `other`), and the full `.detail` message.

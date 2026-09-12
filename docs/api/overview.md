@@ -1,4 +1,4 @@
-# API Reference — Overview
+# API Reference - Overview
 
 The public surface of `pydobotlab` is small and stable. Almost everything you'll write goes through one class:
 
@@ -12,15 +12,15 @@ from pydobotlab import Magician
 
 Every page in this section follows the same layout so you can scan it quickly:
 
-* **Group purpose** — one paragraph saying what the methods on this page are for.
-* **Methods** — for each public method:
+* **Group purpose** - one paragraph saying what the methods on this page are for.
+* **Methods** - for each public method:
   * Python signature
-  * **Purpose** — what it does in plain English.
-  * **Inputs** — argument-by-argument table.
-  * **Returns** — what comes back.
-  * **Raises** — exceptions you might see.
-  * **Protocol** — the underlying [Dobot CommandID](../protocol/command-ids.md) and notes on how pydobotlab uses it (queued vs. immediate, packed parameter layout).
-  * **Notes** / **Example** — gotchas and a code snippet.
+  * **Purpose** - what it does in plain English.
+  * **Inputs** - argument-by-argument table.
+  * **Returns** - what comes back.
+  * **Raises** - exceptions you might see.
+  * **Protocol** - the underlying [Dobot CommandID](../protocol/command-ids.md) and notes on how pydobotlab uses it (queued vs. immediate, packed parameter layout).
+  * **Notes** / **Example** - gotchas and a code snippet.
 
 Because most Magician methods send exactly one Dobot frame, the **Protocol** entry is the bridge between the friendly Python API and the wire-level [Dobot Communication Protocol V1.1.5](https://www.alcom.no/wp-content/uploads/2019/11/Dobot-Communication-Protocol-V1.1.5-1.pdf). If you ever need to debug what's actually going down the serial line, that's where you look.
 
@@ -55,8 +55,8 @@ Because most Magician methods send exactly one Dobot frame, the **Protocol** ent
 
 ## A word on returned values
 
-Methods that **set** state and go through the firmware's queue (`ptp`, `set_home`, `set_endeffector_*`, ...) return the **queue index** assigned to that command — a monotonically increasing integer the firmware uses to tell you when it has executed your command. You can hand it to [`wait_for()`](queue.md#wait_forindex-timeoutnone-poll002-raise_on_alarmtrue-none) to block until it runs, or ignore it for fire-and-forget execution.
+Methods that **set** state and go through the firmware's queue (`ptp`, `set_home`, `set_endeffector_*`, ...) return the **queue index** assigned to that command - a monotonically increasing integer the firmware uses to tell you when it has executed your command. You can hand it to [`wait_for()`](queue.md#wait_forindex-timeoutnone-poll002-raise_on_alarmtrue-none) to block until it runs, or ignore it for fire-and-forget execution.
 
 Methods that **read** state (`get_pose`, `get_alarms`, `get_di`, ...) return the value directly.
 
-Methods that go **immediate** (no queue: `clear_alarm`, `clear_queue`, `start_queue`, `jog`, `jog_stop`, ...) return either `None`, the parsed `Frame`, or the value of interest — see each page for specifics.
+Methods that go **immediate** (no queue: `clear_alarm`, `clear_queue`, `start_queue`, `jog`, `jog_stop`, ...) return either `None`, the parsed `Frame`, or the value of interest - see each page for specifics.

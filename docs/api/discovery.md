@@ -30,7 +30,7 @@ from pydobotlab import (
 
 **Returns.** `list[PortInfo]`. Sorted with known-adapter ports first.
 
-**No protocol I/O** — this is a pure OS enumeration. No frames are sent.
+**No protocol I/O** - this is a pure OS enumeration. No frames are sent.
 
 ---
 
@@ -65,9 +65,9 @@ from pydobotlab import (
 
 **Returns.** `list[DiscoveredDobot]`. Each entry has `.port`, `.serial_number`, `.description`.
 
-**Protocol.** Same probe as `is_dobot()` per port — [`GET_DEVICE_SN`](../protocol/command-ids.md) (0).
+**Protocol.** Same probe as `is_dobot()` per port - [`GET_DEVICE_SN`](../protocol/command-ids.md) (0).
 
-**Example — pin specific arms by serial:**
+**Example - pin specific arms by serial:**
 
 ```python
 from pydobotlab import discover, Magician
@@ -87,7 +87,7 @@ This is what the panel hub uses, so that ttyACM ports on Linux are surfaced with
 
 **Inputs.** Same as `discover()`.
 
-**Returns.** `(hits, failures)` — `hits: list[DiscoveredDobot]`, `failures: list[`[`ProbeFailure`](#probefailure)`]`.
+**Returns.** `(hits, failures)` - `hits: list[DiscoveredDobot]`, `failures: list[`[`ProbeFailure`](#probefailure)`]`.
 
 **Example.**
 
@@ -97,7 +97,7 @@ from pydobotlab import Discovery
 hits, failures = Discovery.discover_with_diagnostics()
 print("found:", hits)
 for f in failures:
-    print(f"  rejected {f.port}: {f.reason} — {f.detail}")
+    print(f"  rejected {f.port}: {f.reason} - {f.detail}")
 ```
 
 ---
@@ -123,7 +123,7 @@ for f in failures:
 | Field | Type | Meaning |
 |-------|------|---------|
 | `port` | `str` | OS device name. |
-| `description` | `str` | OS-supplied description (e.g. `"USB Serial — CH340"`). |
+| `description` | `str` | OS-supplied description (e.g. `"USB Serial - CH340"`). |
 | `vid, pid` | `int \| None` | USB vendor / product IDs. |
 | `serial_number` | `str \| None` | USB descriptor SN (the cable's, not the arm's). |
 | `is_known_dobot_adapter` | `bool` | VID/PID is in `KNOWN_DOBOT_USB_IDS`. |
@@ -150,7 +150,7 @@ Returned by `discover_with_diagnostics()` for each port that was tried but didn'
 
 ## `KNOWN_DOBOT_USB_IDS`
 
-Settable `set[tuple[int, int]]` of `(vid, pid)` pairs treated as Dobot adapters. The default contains `(0x1A86, 0x7523)` (WCH CH340 — every Magician seen in the wild). Extend at runtime if your hardware revision uses a different adapter:
+Settable `set[tuple[int, int]]` of `(vid, pid)` pairs treated as Dobot adapters. The default contains `(0x1A86, 0x7523)` (WCH CH340 - every Magician seen in the wild). Extend at runtime if your hardware revision uses a different adapter:
 
 ```python
 from pydobotlab.discovery import KNOWN_DOBOT_USB_IDS

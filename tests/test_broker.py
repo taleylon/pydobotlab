@@ -106,7 +106,7 @@ def test_broker_transport_round_trips_a_frame(broker):
     try:
         # Send a GetPose request through the broker.
         resp = bt.send_frame(CommandID.GET_POSE, 0)
-        # FakeSerial returned 8 floats — verify they come back via the broker.
+        # FakeSerial returned 8 floats - verify they come back via the broker.
         from pydobotlab.protocol import unpack_floats
 
         values = unpack_floats(resp.params[:32])

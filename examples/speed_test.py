@@ -1,7 +1,7 @@
 """Verify that the speed setting actually controls how fast the arm moves.
 
-Runs the same fixed-distance move twice — once at 100 % speed, once at 25 %
-— and prints the wall-clock for each. On a working setup the slow run takes
+Runs the same fixed-distance move twice - once at 100 % speed, once at 25 %
+- and prints the wall-clock for each. On a working setup the slow run takes
 ~4× longer than the fast one (within friction / acceleration overhead).
 
 Use it on real hardware to confirm the speed slider in pydobotlab-panel is
@@ -69,7 +69,7 @@ def main() -> int:
                 "the move and that the firmware accepts the value."
             )
             return 1
-        print("OK — the speed setting controls the move duration as expected.")
+        print("OK - the speed setting controls the move duration as expected.")
 
     return 0
 

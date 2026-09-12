@@ -4,13 +4,13 @@ The arm has independent velocity / acceleration ratios for **PTP** (trajectory m
 
 ---
 
-## `motion_params` *(property)* — `tuple[float, float]`
+## `motion_params` *(property)* - `tuple[float, float]`
 
 **Purpose.** Read or write the global PTP velocity and acceleration ratios.
 
-**Getter — Returns.** `(vel_ratio, acc_ratio)` as floats `0..100`.
+**Getter - Returns.** `(vel_ratio, acc_ratio)` as floats `0..100`.
 
-**Setter — Inputs.** `(vel_ratio, acc_ratio)`. Each is clamped to `0..100` server-side.
+**Setter - Inputs.** `(vel_ratio, acc_ratio)`. Each is clamped to `0..100` server-side.
 
 **Protocol.** [`GET_SET_PTP_COMMON_PARAMS`](../protocol/command-ids.md) (83). Get is read + immediate. Set is write + queued; param: `float32 vel | float32 acc`.
 
@@ -23,18 +23,18 @@ print(bot.motion_params)  # (50.0, 50.0)
 
 ---
 
-## `jump_params` *(property)* — `tuple[float, float]`
+## `jump_params` *(property)* - `tuple[float, float]`
 
 **Purpose.** Read or write the JUMP-mode parameters (`zlimit`, `height`).
 
-* `height` — how far above the *higher* of the two endpoints the arm lifts before flying across.
-* `zlimit` — an absolute upper Z bound the trajectory may never exceed.
+* `height` - how far above the *higher* of the two endpoints the arm lifts before flying across.
+* `zlimit` - an absolute upper Z bound the trajectory may never exceed.
 
 The setter takes them in that **API order** (`zlimit, height`); the wire frame swaps to the official `(height, zlimit)` layout internally.
 
-**Getter — Returns.** `(zlimit, height)` floats (mm).
+**Getter - Returns.** `(zlimit, height)` floats (mm).
 
-**Setter — Inputs.** `(zlimit, height)`.
+**Setter - Inputs.** `(zlimit, height)`.
 
 **Protocol.** [`GET_SET_PTP_JUMP_PARAMS`](../protocol/command-ids.md) (82). Get is read + immediate. Set is write + queued; wire param: `float32 jumpHeight | float32 zLimit` (8 bytes).
 
@@ -72,7 +72,7 @@ bot.jump_params = (150.0, 30.0)  # zlimit = 150 mm, lift height = 30 mm
 
 **Purpose.** Convenience accessor for whichever common-params velocity matters in `mode`.
 
-**Inputs.** `mode: int` — `0` = JOG, `1` = PTP.
+**Inputs.** `mode: int` - `0` = JOG, `1` = PTP.
 
 **Returns.** `float` velocity ratio `0..100`.
 

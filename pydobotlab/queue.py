@@ -31,7 +31,7 @@ class BatchState:
     """Per-Dobot state for nested batches.
 
     A counter rather than a boolean so that nested ``with dobot.batch():``
-    blocks DTRT — only the outermost block actually pauses/resumes the queue.
+    blocks DTRT - only the outermost block actually pauses/resumes the queue.
     """
 
     __slots__ = ("depth", "lock")
@@ -43,7 +43,7 @@ class BatchState:
 
 @contextmanager
 def batch_context(dobot: Dobot):
-    """Implementation of ``Dobot.batch()`` — see :class:`pydobotlab.Dobot`.
+    """Implementation of ``Dobot.batch()`` - see :class:`pydobotlab.Dobot`.
 
     Paused → enqueue commands → resumed. The outer block also clears the queue
     on entry, so callers never inherit leftover state from a previous run.

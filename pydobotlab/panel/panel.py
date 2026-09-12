@@ -86,7 +86,7 @@ class PoseStreamer(QObject):
                 if lines != self._last_alarms:
                     self._last_alarms = lines
                     self.alarmsChanged.emit(lines)
-            # 1 Hz: speed refresh — picks up changes a student script
+            # 1 Hz: speed refresh - picks up changes a student script
             # makes via motion_params or set_jog_common_params, so the
             # slider stays in sync with what the arm is actually using.
             if self._tick % self._speed_period_ticks == 0:
@@ -124,7 +124,7 @@ class HomeWorker(QThread):
 
 
 class ControlPanel(QMainWindow):
-    """One window per arm — DobotLab Arm Control Panel look & feel."""
+    """One window per arm - DobotLab Arm Control Panel look & feel."""
 
     closed = Signal(str)  # emits port name when window closes
 
@@ -161,7 +161,7 @@ class ControlPanel(QMainWindow):
 
         # Header: port + serial + status + Reconnect + Home + Clear Alarm
         header = QHBoxLayout()
-        self._title = QLabel(f"Dobot Magician  —  {self._port}")
+        self._title = QLabel(f"Dobot Magician  -  {self._port}")
         self._title.setObjectName("header")
         header.addWidget(self._title)
         header.addStretch(1)
@@ -203,12 +203,12 @@ class ControlPanel(QMainWindow):
         speed_box.addWidget(self._speed_value)
         root.addWidget(speed_card)
 
-        # Jump-mode parameters (zlimit + height) — surfaced on the panel
+        # Jump-mode parameters (zlimit + height) - surfaced on the panel
         # because DobotLab keeps them hidden behind a menu.
         self._jump_card = JumpParamsCard()
         root.addWidget(self._jump_card)
 
-        # Two coordinate readouts — Cartesian for the top row, joints for
+        # Two coordinate readouts - Cartesian for the top row, joints for
         # the bottom row. Each sits next to its corresponding jog pads in a
         # single horizontal row so the numbers stay visually associated with
         # the controls that move them (matches the DobotLab layout exactly).
@@ -331,7 +331,7 @@ class ControlPanel(QMainWindow):
         except Exception:
             pass
         self._title.setText(
-            f"Dobot Magician  —  {self._bot.port}" + (f"   (serial: {sn})" if sn else "")
+            f"Dobot Magician  -  {self._bot.port}" + (f"   (serial: {sn})" if sn else "")
         )
         self.statusBar().showMessage(f"Connected to {self._bot.port}")
 
@@ -402,7 +402,7 @@ class ControlPanel(QMainWindow):
         the speed setting just like move_to() does."""
         speed_percent = float(self._speed_slider.value())
         try:
-            self._bot.motion_params = (speed_percent, speed_percent)  # 3.6.6 — PTP rate
+            self._bot.motion_params = (speed_percent, speed_percent)  # 3.6.6 - PTP rate
             self._bot.set_jog_common_params(speed_percent, speed_percent)  # JOG rate
         except Exception as error:
             self.statusBar().showMessage(f"speed: {error}", 3000)
@@ -460,12 +460,12 @@ class ControlPanel(QMainWindow):
                 self,
                 "Alarm persists",
                 "Clear was accepted by the firmware but the alarm came right "
-                "back — the physical condition is still active. Fix it first:\n\n"
+                "back - the physical condition is still active. Fix it first:\n\n"
                 + "\n".join(f"  • {line}" for line in lines)
                 + "\n\nFor joint-limit alarms: jog away from the limit (or "
                 "press Home) and the alarm will clear by itself.",
             )
-            self.statusBar().showMessage("alarm persists — see warning", 4000)
+            self.statusBar().showMessage("alarm persists - see warning", 4000)
 
         QTimer.singleShot(200, verify_alarm_cleared)
 
@@ -479,7 +479,7 @@ class ControlPanel(QMainWindow):
         "click a button, the arm keeps moving forever". The safe behaviour
         is to refuse to start a new jog at all until the student clears the
         alarm (which the panel surfaces with the troubleshoot text right
-        above the buttons). Home and Clear-Alarm stay enabled — they're the
+        above the buttons). Home and Clear-Alarm stay enabled - they're the
         recovery path.
 
         We also fire one extra ``jog_stop()`` on every transition, so if a
@@ -493,7 +493,7 @@ class ControlPanel(QMainWindow):
             self._alarm_banner.setVisible(True)
         else:
             self._alarm_banner.setVisible(False)
-        # Toggle JOG availability (Home & Clear-Alarm stay on — they recover).
+        # Toggle JOG availability (Home & Clear-Alarm stay on - they recover).
         if active != self._jog_locked:
             self._jog_locked = active
             for pad in (self._xy_pad, self._zr_pad, self._j12_pad, self._j34_pad):
@@ -506,7 +506,7 @@ class ControlPanel(QMainWindow):
                 except Exception:
                     pass
                 self.statusBar().showMessage(
-                    "jog disabled — clear the alarm first",
+                    "jog disabled - clear the alarm first",
                     4000,
                 )
 
@@ -522,7 +522,7 @@ class ControlPanel(QMainWindow):
 
     @Slot()
     def check_connection(self) -> None:
-        """Probe TRANSPORT HEALTH — does the wire still answer?
+        """Probe TRANSPORT HEALTH - does the wire still answer?
 
         We use ``get_device_version()`` rather than something arm-state-y like
         ``get_alarms()`` because:

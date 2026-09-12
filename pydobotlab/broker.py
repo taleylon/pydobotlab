@@ -5,7 +5,7 @@ Why a broker?
 
 A serial port can only be opened by one process at a time. That means a
 control-panel GUI and a Python script in PyCharm can't both talk to the
-same arm — one of them gets a "port busy" error. DobotStudio works around
+same arm - one of them gets a "port busy" error. DobotStudio works around
 this with its **DobotLink** helper: a local daemon that owns the port and
 multiplexes traffic for everything else.
 
@@ -35,7 +35,7 @@ already):
         server -> client:  u16-be length + raw Dobot frame
 
 The "raw Dobot frame" is exactly what :func:`pydobotlab.protocol.pack`
-produces — header, len, ID, ctrl, params, checksum.
+produces - header, len, ID, ctrl, params, checksum.
 """
 
 from __future__ import annotations
@@ -264,7 +264,7 @@ class DobotBroker:
         finally:
             # Decrement client count. If we lazily attached and we're the
             # last client out, close the SerialTransport so the OS releases
-            # the port — otherwise a panel close would leave the broker
+            # the port - otherwise a panel close would leave the broker
             # holding the port forever.
             self._release_client(port_name)
 
