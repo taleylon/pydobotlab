@@ -1,0 +1,224 @@
+/* pydobotlab control-panel dark theme.
+ * Approximates the DobotLab "Arm Control Panel" look: dark slate
+ * background, slightly lighter cards, cyan accent. */
+
+QWidget {
+    background: #1f232b;
+    color: #e6e9ef;
+    font-family: "Segoe UI", "Roboto", sans-serif;
+    font-size: 11pt;
+}
+
+QMainWindow, QDialog {
+    background: #1a1d23;
+}
+
+QFrame#card, QGroupBox {
+    background: #252932;
+    border: 1px solid #2e3340;
+    border-radius: 8px;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 4px 12px;
+    color: #aab2c2;
+    font-weight: 600;
+}
+
+QLabel {
+    background: transparent;
+}
+
+QLabel#header {
+    font-size: 14pt;
+    font-weight: 600;
+    color: #ffffff;
+    padding: 4px 0;
+}
+
+QLabel#poseValue {
+    font-family: "Consolas", "Menlo", monospace;
+    font-size: 12pt;
+    color: #6cc6ff;
+    background: #14171c;
+    padding: 4px 10px;
+    border-radius: 4px;
+    border: 1px solid #2a2f3a;
+    min-width: 60px;
+}
+
+QLabel#poseLabel {
+    color: #aab2c2;
+    font-weight: 600;
+    min-width: 22px;
+}
+
+QLabel#alarmBanner {
+    background: #5a1e25;
+    color: #ffd5d5;
+    padding: 8px 12px;
+    border-radius: 4px;
+    border: 1px solid #8a2a36;
+    font-weight: 600;
+}
+
+QPushButton {
+    background: #2e3340;
+    border: 1px solid #3a4150;
+    border-radius: 4px;
+    padding: 6px 14px;
+    color: #e6e9ef;
+}
+
+QPushButton:hover {
+    background: #3a4150;
+    border-color: #4a90e2;
+}
+
+QPushButton:pressed {
+    background: #1a3a55;
+    border-color: #4a90e2;
+}
+
+QPushButton:disabled {
+    background: #20242c;
+    color: #555a66;
+    border-color: #20242c;
+}
+
+QPushButton#primary {
+    background: #2c7be5;
+    border-color: #4a90e2;
+    color: #ffffff;
+    font-weight: 600;
+}
+
+QPushButton#primary:hover {
+    background: #3a8aef;
+}
+
+QPushButton#primary:pressed {
+    background: #1a5dc4;
+}
+
+QPushButton#danger {
+    background: #c93a3a;
+    border-color: #d44949;
+    color: #ffffff;
+    font-weight: 600;
+}
+
+QPushButton#danger:hover {
+    background: #d44949;
+}
+
+/* Jog buttons inside JogPad — round with subtle glow on press */
+QPushButton#jog {
+    background: #2a2f3a;
+    border: 1px solid #3a4150;
+    border-radius: 28px;
+    min-width: 56px;
+    min-height: 56px;
+    color: #cfd6e3;
+    font-weight: 600;
+}
+
+QPushButton#jog:hover {
+    border-color: #4a90e2;
+    color: #ffffff;
+}
+
+QPushButton#jog:pressed {
+    background: #1a3a55;
+    border-color: #6cc6ff;
+    color: #ffffff;
+}
+
+QPushButton#jogSmall {
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: 22px;
+    font-size: 10pt;
+}
+
+QSlider::groove:horizontal {
+    background: #14171c;
+    height: 6px;
+    border-radius: 3px;
+}
+
+QSlider::sub-page:horizontal {
+    background: #4a90e2;
+    border-radius: 3px;
+}
+
+QSlider::handle:horizontal {
+    background: #6cc6ff;
+    width: 16px;
+    height: 16px;
+    margin: -6px 0;
+    border-radius: 8px;
+}
+
+QTabWidget::pane {
+    border: 1px solid #2e3340;
+    border-radius: 4px;
+    background: #252932;
+    top: -1px;
+}
+
+QTabBar::tab {
+    background: #1f232b;
+    color: #aab2c2;
+    padding: 6px 18px;
+    border: 1px solid #2e3340;
+    border-bottom: none;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    margin-right: 2px;
+}
+
+QTabBar::tab:selected {
+    background: #252932;
+    color: #ffffff;
+    border-color: #4a90e2;
+    border-bottom: 1px solid #252932;
+}
+
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+    border: 1px solid #3a4150;
+    border-radius: 3px;
+    background: #14171c;
+}
+
+QCheckBox::indicator:checked {
+    background: #4a90e2;
+    border-color: #6cc6ff;
+}
+
+QListView, QListWidget {
+    background: #14171c;
+    border: 1px solid #2e3340;
+    border-radius: 4px;
+    padding: 4px;
+}
+
+QListWidget::item {
+    padding: 8px 10px;
+    border-radius: 4px;
+}
+
+QListWidget::item:selected {
+    background: #1a3a55;
+    color: #ffffff;
+}
+
+QStatusBar {
+    background: #14171c;
+    color: #aab2c2;
+    border-top: 1px solid #2e3340;
+}

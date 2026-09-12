@@ -1,0 +1,88 @@
+site_name: pydobotlab
+site_description: Python control for the Dobot Magician — user guide and API reference.
+site_author: Tal Eylon
+site_url: https://taleylon.github.io/pydobotlab/
+repo_url: https://github.com/taleylon/pydobotlab
+repo_name: taleylon/pydobotlab
+edit_uri: edit/main/docs/
+copyright: Copyright &copy; 2026 Tal Eylon
+
+theme:
+  name: material
+  font: false
+  palette:
+    - scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+
+plugins:
+  - search
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.details
+  - toc:
+      permalink: true
+
+validation:
+  links:
+    not_found: warn
+    anchors: warn
+    unrecognized_links: warn
+
+nav:
+  - Home: README.md
+  - "Getting Started":
+      - "Installation": getting-started/install.md
+      - "Connecting to an arm": getting-started/connect.md
+      - "Hello, Magician": getting-started/first-script.md
+      - "Running without hardware (simulator)": getting-started/simulator.md
+      - "Linux setup (Ubuntu / Debian)": getting-started/linux.md
+  - "API Reference":
+      - "Overview": api/overview.md
+      - "Connection lifecycle": api/connection.md
+      - "Pose & motion": api/motion.md
+      - "JOG (live, non-trajectory motion)": api/jog.md
+      - "Speed & motion parameters": api/speed.md
+      - "Alarms": api/alarms.md
+      - "Queue control": api/queue.md
+      - "End-effectors": api/end-effectors.md
+      - "Digital I/O & sensors": api/io.md
+      - "Conveyor & extras": api/extras.md
+      - "Real-time pose stream": api/pose-stream.md
+      - "Discovery (finding arms)": api/discovery.md
+      - "Errors & exceptions": api/errors.md
+  - "Control Panel & Broker":
+      - "Overview": panel/overview.md
+      - "Running the panel": panel/running.md
+      - "The DobotBroker (multi-client)": panel/broker.md
+  - "Protocol Reference":
+      - "Frame format": protocol/frame-format.md
+      - "Control byte (rw / isQueued)": protocol/ctrl-byte.md
+      - "Command ID table": protocol/command-ids.md
+      - "Method ↔ command mapping": protocol/method-to-cmd.md
+      - "Alarm bitmask": protocol/alarms.md
+  - Project:
+      - Publishing: publishing.md
+      - Table of contents: SUMMARY.md

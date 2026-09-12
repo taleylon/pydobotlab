@@ -1,0 +1,81 @@
+[build-system]
+requires = ["setuptools>=77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pydobotlab"
+dynamic = ["version"]
+description = "Pure-Python control library for the Dobot Magician robot arm. A lightweight, cross-platform replacement for DobotStudio / DobotLab. Tel Aviv University CIM Lab"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Tal Eylon", email = "taleylon1@gmail.com" }
+]
+keywords = ["dobot", "magician", "robotics", "serial", "education"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = [
+    "pyserial>=3.5",
+]
+
+[project.optional-dependencies]
+gui = [
+    "PySide6>=6.5",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-timeout>=2.3",
+    "ruff>=0.6",
+    "build>=1.2",
+    "twine>=6.1",
+]
+
+docs = ["mkdocs-material>=9.6,<10"]
+
+[project.urls]
+Homepage = "https://taleylon.github.io/pydobotlab/"
+Documentation = "https://taleylon.github.io/pydobotlab/"
+Repository = "https://github.com/taleylon/pydobotlab"
+Issues = "https://github.com/taleylon/pydobotlab/issues"
+
+[project.scripts]
+pydobotlab-panel = "pydobotlab.panel.app:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "pydobotlab.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pydobotlab*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+"pydobotlab.panel" = ["*.qss"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B", "PTH"]
+
+[tool.ruff.lint.per-file-ignores]
+# The documented DobotLab slideway argument is named "l".
+"pydobotlab/device.py" = ["E741"]

@@ -1,0 +1,72 @@
+name: Publish package
+
+on:
+  workflow_dispatch:
+    inputs:
+      destination:
+        description: Package index
+        type: choice
+        required: true
+        default: testpypi
+        options: [testpypi, pypi]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ inputs.destination }}
+  cancel-in-progress: false
+
+jobs:
+  check-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Require a matching version tag for production
+        if: inputs.destination == 'pypi'
+        run: |
+          python - <<'PY'
+          import ast
+          import os
+          from pathlib import Path
+          module = ast.parse(Path("pydobotlab/__init__.py").read_text())
+          version = next(
+              ast.literal_eval(node.value)
+              for node in module.body
+              if isinstance(node, ast.Assign)
+              and any(isinstance(target, ast.Name) and target.id == "__version__" for target in node.targets)
+          )
+          expected = f"refs/tags/v{version}"
+          if os.environ["GITHUB_REF"] != expected:
+              raise SystemExit(f"Select tag v{version} to publish this version to PyPI")
+          PY
+
+  validate:
+    needs: check-release
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: validate
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.destination }}
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          name: distributions
+          path: dist/
+      - name: Publish to TestPyPI
+        if: inputs.destination == 'testpypi'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+      - name: Publish to PyPI
+        if: inputs.destination == 'pypi'
+        uses: pypa/gh-action-pypi-publish@release/v1
