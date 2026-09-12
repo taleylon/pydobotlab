@@ -43,7 +43,7 @@ For each method: the `CommandID` it sends, the ctrl byte, and the param layout (
 | [`set_cp_params`](../api/speed.md#set_cp_paramsplan_acc-junction_vel-acc00-real_time_trackfalse-int) | 90 | `0x03` | `f32 planAcc, f32 junctionVel, f32 acc, u8 realTimeTrack` | Tune CP planner. |
 | [`set_conveyor` / `set_converyor`](../api/extras.md#set_conveyorindex-enable-speed-int) | 135 | `0x03` | `u8 index, u8 enable, i32 speed` | |
 | [`set_device_name`](../api/extras.md#set_device_namename-none) | 1 | `0x01` | ASCII bytes + `\0` | |
-| [`set_device_withl`](../api/extras.md#set_device_withlenable-version0-int) | 3 | `0x03` | `u8 enable, u8 version` | |
+| [`set_device_withl`](../api/extras.md#set-device-withl) | 3 | `0x01` | `u8 enable, u8 version` | |
 | [`set_do`](../api/io.md#set_doio-level-int) | 131 | `0x03` | `u8 port, u8 level` | |
 | [`set_endeffector_gripper`](../api/end-effectors.md#set_endeffector_gripperenable-on-int) | 63 | `0x03` | `u8 enableCtrl, u8 grip` | |
 | [`set_endeffector_suctioncup`](../api/end-effectors.md#set_endeffector_suctioncupenable-on-int) | 62 | `0x03` | `u8 enableCtrl, u8 on` | |
@@ -51,7 +51,7 @@ For each method: the `CommandID` it sends, the ctrl byte, and the param layout (
 | [`set_infrared_sensor`](../api/io.md#set_infrared_sensorport-enable-version1-int) | 138 | `0x03` | `u8 enable, u8 port, u8 version` | |
 | [`set_jog_common_params`](../api/speed.md#set_jog_common_paramsvel_ratio-acc_ratio-int) | 72 | `0x03` | `f32 vel, f32 acc` | |
 | [`set_lost_step_cmd`](../api/extras.md#set_lost_step_cmd-int) | 171 | `0x03` | – | |
-| [`set_lost_step_params`](../api/extras.md#set_lost_step_paramsvalue-int) | 170 | `0x03` | `f32 threshold` | |
+| [`set_lost_step_params`](../api/extras.md#set-lost-step-params) | 170 | `0x01` | `f32 threshold` | |
 | [`set_multiplexing`](../api/io.md#set_multiplexingio-multiplex-int) | 130 | `0x03` | `u8 port, u8 function` | |
 | [`set_ptpl_params`](../api/speed.md#set_ptpl_paramsvel-accel-int) | 85 | `0x03` | `f32 vel, f32 acc` | |
 | [`set_ptpwithl_cmd`](../api/motion.md#set_ptpwithl_cmdmode-x-y-z-r-l-int) | 86 | `0x03` | `u8 mode, f32 x, f32 y, f32 z, f32 r, f32 l` | |

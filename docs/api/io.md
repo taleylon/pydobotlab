@@ -75,11 +75,11 @@ pydobotlab accepts both the official "DO_01" / "DI_05" string names *and* raw GP
 
 | Arg | Type | Meaning |
 |-----|------|---------|
-| `port` | `int` | GP1 (1) or GP2 (2). |
+| `port` | `int` | GP1 through GP6 (1 through 6), according to the sensor version. |
 | `enable` | `bool` | Mount and power the sensor. |
 | `version` | `int` | `0` = v1, `1` = v2 module. |
 
-**Returns.** `int` queued-command index. Also stored internally so `get_color_sensor()` knows which port to read.
+**Returns.** `int` queued-command index.
 
 **Protocol.** [`GET_SET_COLOR_SENSOR`](../protocol/command-ids.md) (137), write + queued.
 

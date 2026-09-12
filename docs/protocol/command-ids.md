@@ -1,6 +1,6 @@
 # Command ID table
 
-The full list of Dobot V1.1.5 command IDs that pydobotlab knows about. Source: `pydobotlab/commands.py` and the [official protocol PDF](https://www.alcom.no/wp-content/uploads/2019/11/Dobot-Communication-Protocol-V1.1.5-1.pdf).
+The full list of Dobot V1.1.5 command IDs that pydobotlab knows about. Source: `pydobotlab/commands.py` and the [official protocol PDF](https://download.dobot.cc/product-manual/dobot-magician/pdf/en/Dobot-Communication-Protocol-V1.1.5.pdf).
 
 For each entry: ID (decimal / hex), the symbolic name as it appears in `pydobotlab.commands.CommandID`, and the high-level `Magician` method that sends it (or "-" if pydobotlab doesn't wrap it yet, in which case you can still send it via `bot.write_command(CommandID.X, params)` / `bot.queue_command(CommandID.X, params)`).
 
@@ -11,7 +11,7 @@ For each entry: ID (decimal / hex), the symbolic name as it appears in `pydobotl
 | 0   | 0x00 | `GET_DEVICE_SN`       | [`get_device_serial_number`](../api/extras.md#get_device_serial_number-str), [`is_dobot`](../api/discovery.md#is_dobotport-timeout04-bool), [`discover`](../api/discovery.md#discover-only_known_adaptersfalse-timeout04-skip-listdiscovereddobot) |
 | 1   | 0x01 | `GET_SET_DEVICE_NAME` | [`get_device_name`](../api/extras.md#get_device_name-str), [`set_device_name`](../api/extras.md#set_device_namename-none) |
 | 2   | 0x02 | `GET_DEVICE_VERSION`  | [`get_device_version`](../api/extras.md#get_device_version-tupleint-int-int) (used by the connection watchdog) |
-| 3   | 0x03 | `GET_SET_DEVICE_WITH_L` | [`set_device_withl`](../api/extras.md#set_device_withlenable-version0-int) |
+| 3   | 0x03 | `GET_SET_DEVICE_WITH_L` | [`set_device_withl`](../api/extras.md#set-device-withl) |
 | 4   | 0x04 | `GET_DEVICE_TIME`     | - |
 | 5   | 0x05 | `GET_DEVICE_ID`       | - |
 
@@ -153,7 +153,7 @@ For each entry: ID (decimal / hex), the symbolic name as it appears in `pydobotl
 
 | ID  | Hex  | Symbol | Magician method |
 |-----|------|--------|-----------------|
-| 170 | 0xAA | `GET_SET_LOST_STEP_PARAMS` | [`set_lost_step_params`](../api/extras.md#set_lost_step_paramsvalue-int) |
+| 170 | 0xAA | `GET_SET_LOST_STEP_PARAMS` | [`set_lost_step_params`](../api/extras.md#set-lost-step-params) |
 | 171 | 0xAB | `SET_LOST_STEP_CMD`        | [`set_lost_step_cmd`](../api/extras.md#set_lost_step_cmd-int) |
 
 ## Queued execution control

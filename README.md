@@ -1,8 +1,18 @@
 # pydobotlab
 
-Python control for the **Dobot Magician** robot arm, with an optional desktop
-control panel and a simulator for working without hardware. Communicates
-over serial using `pyserial`; no vendor DLL or DobotStudio installation is required.
+Python control for the **Dobot Magician**, with full coverage of the 28 Python
+API entries in the [official DobotLab Magician manual](https://cdn.release.dobot.cc/dobotlab-doc/dobotlab/coding-manual-en/20260205/Dobot%20Magician/Dobot%20Magician.html).
+Use the documented function names and arguments for motion, I/O, sensors,
+end-effectors, the slideway, and the conveyor.
+
+All ten `ptp` modes are supported. Extended control adds `move_to` with waiting,
+timeouts, and alarm handling, command batching, and live pose streaming. Run Python scripts
+and the optional desktop control panel separately or in parallel. A simulator
+supports working without hardware.
+
+Communicates over serial using `pyserial` and the
+[Dobot Communication Protocol V1.1.5](https://download.dobot.cc/product-manual/dobot-magician/pdf/en/Dobot-Communication-Protocol-V1.1.5.pdf);
+no vendor DLL or DobotStudio installation is required.
 
 **[Documentation & homepage](https://taleylon.github.io/pydobotlab/)** ·
 [API reference](https://taleylon.github.io/pydobotlab/api/overview/) ·
@@ -39,7 +49,8 @@ from pydobotlab import Magician, PTPMode
 with Magician() as robot:  # auto-discover; or specify "/dev/ttyUSB0" / "COM3"
     robot.clear_alarm()
     robot.set_home()
-    robot.move_to(220, 0, 50, mode=PTPMode.MOVJ_XYZ)
+    command_index = robot.ptp(mode=PTPMode.MOVJ_XYZ, x=220, y=0, z=50, r=0)
+    robot.wait_for(command_index)
     pose = robot.get_pose()
     print(pose)
 ```
@@ -52,11 +63,21 @@ Pose(x=220.00, y=0.00, z=50.00, r=0.00, joints=[0.00, 30.00, 45.00, 0.00])
 
 The values above illustrate the format; actual joint angles depend on the robot's
 pose. Access individual values with `pose.x`, `pose.y`, `pose.z`, `pose.r`, or
-`pose.joints`. Positions are in millimetres and angles are in degrees. Display
-values are rounded to two decimal places; the attributes keep their full precision.
+`pose.joints`. Positions are in millimetres and angles are in degrees.
 
 `Dobot` is also available as an alias for `Magician`. The documented DobotLab
-method names and parameters are preserved for existing scripts and teaching material.
+method names and parameters are preserved for existing scripts.
+
+Queued commands such as `ptp` return a queue index; use `wait_for` to wait for
+completion. `move_to` combines motion and waiting in one call:
+
+```python
+with Magician() as robot:
+    robot.move_to(220, 0, 50, r=0, mode=PTPMode.MOVL_XYZ, timeout=30)
+```
+
+See [DobotLab compatibility](https://taleylon.github.io/pydobotlab/api/dobotlab/)
+for the complete function list and return-value conventions.
 
 ## Try it without hardware
 
@@ -95,21 +116,6 @@ Start with [pick and place](https://github.com/taleylon/pydobotlab/blob/main/exa
 or [two arms with live panels](https://github.com/taleylon/pydobotlab/blob/main/examples/two_dobots_with_panels.py).
 The [user guide](https://taleylon.github.io/pydobotlab/) covers the API,
 control panel, broker, and wire protocol.
-
-## Development
-
-From a local checkout, including before the first PyPI release:
-
-```bash
-python -m pip install -e ".[dev,gui,docs]"
-python -m pytest --timeout=30
-ruff check .
-ruff format --check .
-mkdocs serve
-```
-
-See [contributor guidance](https://github.com/taleylon/pydobotlab/blob/main/CONTRIBUTING.md)
-and the [publishing guide](https://taleylon.github.io/pydobotlab/publishing/).
 
 ## License
 

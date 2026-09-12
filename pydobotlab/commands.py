@@ -4,7 +4,7 @@ Every command the firmware understands has a single byte ID. The same ID is used
 for both the "set" (write) and "get" (read) form of a command - the ``rw`` bit
 of the control byte (see :mod:`pydobotlab.protocol`) selects which one.
 
-Reference: https://www.alcom.no/wp-content/uploads/2019/11/Dobot-Communication-Protocol-V1.1.5-1.pdf
+Reference: https://download.dobot.cc/product-manual/dobot-magician/pdf/en/Dobot-Communication-Protocol-V1.1.5.pdf
 """
 
 from __future__ import annotations

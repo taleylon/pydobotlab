@@ -53,6 +53,7 @@ class PTPMode(IntEnum):
     MOVJ_INC = 6  # relative joint move (delta j1..j4)
     MOVL_INC = 7  # relative Cartesian linear move (delta x, y, z, r)
     MOVJ_XYZ_INC = 8  # relative Cartesian joint-interpolated move
+    JUMP_MOVL_XYZ = 9  # JUMP with linear travel between lift and descent
 
 
 class JogMode(IntEnum):

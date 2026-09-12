@@ -1,7 +1,7 @@
 """High-level :class:`Dobot` API.
 
-The public method names and signatures match the official **DobotLab Coding
-Manual**'s "Dobot Magician" section exactly (3.6.1 - 3.6.28). Where DobotLab
+The public methods preserve the names and arguments in the **DobotLab Coding
+Manual**'s "Dobot Magician" section (3.6.1 - 3.6.28). Where DobotLab
 itself doesn't expose something useful - batched/lazy queue execution,
 real-time pose streaming, structured alarm sets, multi-arm - we add it on
 top, alongside the official surface.
@@ -204,7 +204,7 @@ class Magician:
             - ``"auto"`` (default) - at connect time, probe localhost for a
               running :class:`pydobotlab.broker.DobotBroker` and route through
               it if reachable. Otherwise open the serial port directly. This
-              lets the control-panel GUI and a student script share an arm.
+              lets the control-panel GUI and a Python script share an arm.
             - ``True`` - require the broker; raise if unreachable.
             - ``False`` - never use the broker (always direct serial).
         """
@@ -222,8 +222,6 @@ class Magician:
         self._index_lock = threading.Lock()
         self._pose_stream_stop: threading.Event | None = None
         self._pose_stream_thread: threading.Thread | None = None
-        # get_color_sensor() takes no port; remember the last-configured one.
-        self._color_sensor_port: int = 1
 
     def connect(self) -> None:
         """Resolve the port (auto-pick if unset), open the line, prep the queue.
@@ -363,7 +361,7 @@ class Magician:
 
     # ==================================================================
     # OFFICIAL DobotLab API (sections 3.6.1 - 3.6.28)
-    # Names and signatures match the DobotLab Coding Manual verbatim.
+    # Preserve official names and arguments; some methods add optional controls.
     # ==================================================================
 
     # ---- 3.6.1  Point-to-point Movement -------------------------------
@@ -373,9 +371,9 @@ class Magician:
         return self.queue_command(CommandID.SET_PTP_CMD, params)
 
     # ---- 3.6.2  Set Slideway State and Version ------------------------
-    def set_device_withl(self, enable: bool, version: int = 0) -> int:
+    def set_device_withl(self, enable: bool, version: int = 0) -> None:
         """Enable/disable the slideway and declare its hardware version (0=V1, 1=V2)."""
-        return self.queue_command(
+        self.write_command(
             CommandID.GET_SET_DEVICE_WITH_L,
             pack_u8(1 if enable else 0, int(version)),
         )
@@ -505,7 +503,7 @@ class Magician:
         """Configure an IR / photoelectric sensor on GP1/GP2/GP4/GP5."""
         return self.queue_command(
             CommandID.GET_SET_INFRARED_SENSOR,
-            pack_u8(int(port), 1 if enable else 0, int(version)),
+            pack_u8(1 if enable else 0, int(port), int(version)),
         )
 
     # ---- 3.6.16  Get Value of Photoelectric Sensor --------------------
@@ -516,22 +514,16 @@ class Magician:
 
     # ---- 3.6.17  Set Color Sensor -------------------------------------
     def set_color_sensor(self, port: int, enable: bool, version: int = 0) -> int:
-        """Configure the colour sensor on a specific port. Stores ``port`` so
-        :meth:`get_color_sensor` (which takes no argument in DobotLab) knows
-        which sensor to query."""
-        self._color_sensor_port = int(port)
+        """Configure the colour sensor on GP1 through GP6."""
         return self.queue_command(
             CommandID.GET_SET_COLOR_SENSOR,
-            pack_u8(int(port), 1 if enable else 0, int(version)),
+            pack_u8(1 if enable else 0, int(port), int(version)),
         )
 
     # ---- 3.6.18  Get Value of Color Sensor ----------------------------
     def get_color_sensor(self) -> tuple[int, int, int]:
         """Read ``(r, g, b)`` from the most-recently-configured colour sensor."""
-        frame = self.read_command(
-            CommandID.GET_SET_COLOR_SENSOR,
-            pack_u8(self._color_sensor_port),
-        )
+        frame = self.read_command(CommandID.GET_SET_COLOR_SENSOR)
         return int(frame.params[0]), int(frame.params[1]), int(frame.params[2])
 
     # ---- 3.6.19  Wait N Seconds ---------------------------------------
@@ -580,7 +572,7 @@ class Magician:
         alarm is *still* set - the firmware honoured the clear, but the
         underlying physical condition (joint still mashed against a limit,
         sensor still faulting, etc.) reasserted it immediately. The
-        student needs to fix the *physical* condition first (jog away from
+        operator needs to fix the *physical* condition first (jog away from
         the limit, re-home, ...).
         """
         self.write_command(CommandID.CLEAR_ALL_ALARMS_STATE)
@@ -633,9 +625,9 @@ class Magician:
         return (float(v), float(a))
 
     # ---- 3.6.25  Set Lost-step Threshold ------------------------------
-    def set_lost_step_params(self, value: float) -> int:
+    def set_lost_step_params(self, value: float) -> None:
         """Lost-step alarm threshold; firing it raises a LOST_STEP_* alarm."""
-        return self.queue_command(
+        self.write_command(
             CommandID.GET_SET_LOST_STEP_PARAMS,
             pack_floats(float(value)),
         )

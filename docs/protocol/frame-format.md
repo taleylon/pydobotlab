@@ -2,7 +2,7 @@
 
 pydobotlab implements the **Dobot Communication Protocol V1.1.5**, the same protocol the official DobotStudio / DobotLink stack uses.
 
-> **Reference document.** [Dobot Communication Protocol V1.1.5 (PDF)](https://www.alcom.no/wp-content/uploads/2019/11/Dobot-Communication-Protocol-V1.1.5-1.pdf). Every command ID and parameter layout in this guide is taken directly from that PDF - when in doubt, that's the canonical source.
+> **Reference document.** [Dobot Communication Protocol V1.1.5 (PDF)](https://download.dobot.cc/product-manual/dobot-magician/pdf/en/Dobot-Communication-Protocol-V1.1.5.pdf). Every command ID and parameter layout in this guide is taken directly from that PDF - when in doubt, that's the canonical source.
 
 The protocol is a **request / response** framing over a serial line at **115200 8N1**. Every command the host sends gets exactly one frame back, on the same line.
 

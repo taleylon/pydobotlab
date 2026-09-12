@@ -12,6 +12,7 @@
 
 ## API Reference
 
+* [DobotLab functions](api/dobotlab.md)
 * [Overview](api/overview.md)
 * [Connection lifecycle](api/connection.md)
 * [Pose & motion](api/motion.md)
@@ -39,7 +40,3 @@
 * [Command ID table](protocol/command-ids.md)
 * [Method ↔ command mapping](protocol/method-to-cmd.md)
 * [Alarm bitmask](protocol/alarms.md)
-
-## Project
-
-* [Publishing and maintaining the project](publishing.md)

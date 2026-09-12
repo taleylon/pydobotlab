@@ -28,13 +28,13 @@ The miscellaneous corners: the optional conveyor / slideway accessories, lost-st
 
 ## Slideway (linear rail)
 
-### `set_device_withl(enable, version=0) -> int`
+### `set_device_withl(enable, version=0) -> None` {#set-device-withl}
 
 **Purpose.** Enable/disable the slideway and declare its hardware version (`0` = V1, `1` = V2).
 
-**Returns.** `int` queued-command index.
+**Returns.** `None`.
 
-**Protocol.** [`GET_SET_DEVICE_WITH_L`](../protocol/command-ids.md) (3), write + queued.
+**Protocol.** [`GET_SET_DEVICE_WITH_L`](../protocol/command-ids.md) (3), write + immediate.
 
 ### `set_ptpl_params(vel, accel) -> int`
 
@@ -54,13 +54,13 @@ See [Pose & motion](motion.md#get_posel-float).
 
 A lost step happens when a joint's commanded position drifts from its measured position past a configurable threshold - usually because a motion was forced too hard.
 
-### `set_lost_step_params(value) -> int`
+### `set_lost_step_params(value) -> None` {#set-lost-step-params}
 
 **Purpose.** Set the lost-step detection threshold (degrees).
 
-**Returns.** `int` queued-command index.
+**Returns.** `None`.
 
-**Protocol.** [`GET_SET_LOST_STEP_PARAMS`](../protocol/command-ids.md) (170), write + queued.
+**Protocol.** [`GET_SET_LOST_STEP_PARAMS`](../protocol/command-ids.md) (170), write + immediate.
 
 ### `set_lost_step_cmd() -> int`
 

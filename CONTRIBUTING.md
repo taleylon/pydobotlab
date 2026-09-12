@@ -36,8 +36,6 @@ can be exercised without a display with `QT_QPA_PLATFORM=offscreen`.
 optional `panel` package contains the Qt GUI. Keep Qt imports out of the
 base library. `simulator.py` supplies a software serial backend for testing.
 
-The release process is described in [docs/publishing.md](docs/publishing.md).
-
 ## Documentation
 
 Install `python -m pip install -e ".[docs]"`, then use `mkdocs serve` to

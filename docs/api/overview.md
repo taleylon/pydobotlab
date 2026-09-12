@@ -1,6 +1,8 @@
 # API Reference - Overview
 
-The public surface of `pydobotlab` is small and stable. Almost everything you'll write goes through one class:
+Start with the [28 official DobotLab Magician functions](dobotlab.md), then use
+the extended motion, queue, and streaming APIs as needed. All robot commands go
+through one class:
 
 ```python
 from pydobotlab import Magician
@@ -22,7 +24,7 @@ Every page in this section follows the same layout so you can scan it quickly:
   * **Protocol** - the underlying [Dobot CommandID](../protocol/command-ids.md) and notes on how pydobotlab uses it (queued vs. immediate, packed parameter layout).
   * **Notes** / **Example** - gotchas and a code snippet.
 
-Because most Magician methods send exactly one Dobot frame, the **Protocol** entry is the bridge between the friendly Python API and the wire-level [Dobot Communication Protocol V1.1.5](https://www.alcom.no/wp-content/uploads/2019/11/Dobot-Communication-Protocol-V1.1.5-1.pdf). If you ever need to debug what's actually going down the serial line, that's where you look.
+Because most Magician methods send exactly one Dobot frame, the **Protocol** entry is the bridge between the friendly Python API and the wire-level [Dobot Communication Protocol V1.1.5](https://download.dobot.cc/product-manual/dobot-magician/pdf/en/Dobot-Communication-Protocol-V1.1.5.pdf). If you ever need to debug what's actually going down the serial line, that's where you look.
 
 ## Methods by category
 

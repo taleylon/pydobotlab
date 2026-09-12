@@ -35,7 +35,7 @@ To work from source before the first release, run
 
 This installs the library plus its console scripts (`pydobotlab-panel`).
 
-If you want the **control panel GUI** (recommended for students), install the GUI extra:
+If you want the **control panel GUI**, install the GUI extra:
 
 ```bash
 python -m pip install "pydobotlab[gui]"

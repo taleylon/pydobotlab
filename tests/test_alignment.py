@@ -88,6 +88,13 @@ def test_set_conveyor_alias_for_typo_function():
         ("get_infrared_sensor", ["self", "port"]),
         ("set_color_sensor", ["self", "port", "enable", "version"]),
         ("wait", ["self", "second"]),
+        ("set_home", ["self"]),
+        ("get_pose", ["self"]),
+        ("get_posel", ["self"]),
+        ("clear_alarm", ["self"]),
+        ("get_color_sensor", ["self"]),
+        ("set_lost_step_cmd", ["self"]),
+        ("get_lost_step_result", ["self"]),
         ("get_arm_speed_ratio", ["self", "mode"]),
         ("set_lost_step_params", ["self", "value"]),
         ("set_converyor", ["self", "index", "enable", "speed"]),
@@ -96,7 +103,14 @@ def test_set_conveyor_alias_for_typo_function():
 def test_signature_matches_gitbook(method, params):
     sig = inspect.signature(getattr(Dobot, method))
     actual = list(sig.parameters.keys())
-    assert actual == params, f"Dobot.{method} signature drift - expected {params}, got {actual}"
+    assert actual[: len(params)] == params, (
+        f"Dobot.{method} signature drift - expected {params}, got {actual}"
+    )
+    for parameter in list(sig.parameters.values())[len(params) :]:
+        assert parameter.kind == inspect.Parameter.KEYWORD_ONLY
+        assert parameter.default is not inspect.Parameter.empty
+    arguments = {name: 0 for name in params if name != "self"}
+    sig.bind(None, **arguments)
 
 
 def test_get_color_sensor_takes_no_args():

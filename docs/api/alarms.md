@@ -35,7 +35,7 @@ if alarms:
 
 | Arg | Type | Default | Meaning |
 |-----|------|---------|---------|
-| `verify` | `bool` | `False` | After clearing, sleep `settle` seconds and re-poll. If any *motion-related* alarm bit is still set, the firmware honoured the clear but the **physical condition** that triggered it (e.g. a joint mashed against a limit) is still active - raise [`DobotAlarmError`](errors.md#dobotalarmerror) so the student knows to fix the physical state, not just the bitmask. |
+| `verify` | `bool` | `False` | After clearing, sleep `settle` seconds and re-poll. If any *motion-related* alarm bit is still set, the firmware honoured the clear but the **physical condition** that triggered it (e.g. a joint mashed against a limit) is still active - raise [`DobotAlarmError`](errors.md#dobotalarmerror) so the caller can address the physical condition. |
 | `settle` | `float` | `0.15` | Verification settle delay in seconds. Only relevant when `verify=True`. |
 
 **Returns.** `None`.

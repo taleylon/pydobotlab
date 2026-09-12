@@ -28,9 +28,7 @@ For example (illustrative values):
 Pose(x=220.00, y=0.00, z=50.00, r=0.00, joints=[0.00, 30.00, 45.00, 0.00])
 ```
 
-`Pose.__str__` formats values to two decimal places for display. The attributes
-retain their full precision. Positions are in millimetres; `r` and the joint
-angles are in degrees.
+Positions are in millimetres; `r` and the joint angles are in degrees.
 
 Use `as_xyzr()` to unpack only the Cartesian coordinates, including rotation:
 
@@ -195,7 +193,7 @@ See `examples/draw_smiley.py` for a complete eager-vs-lazy-vs-continuous compari
 
 **Protocol.** [`SET_PTP_WITH_L_CMD`](../protocol/command-ids.md) (86), write + queued. Param: `u8 mode | float32 x | float32 y | float32 z | float32 r | float32 l` (21 bytes).
 
-**Note.** Requires the slideway to be enabled with [`set_device_withl(True, version=...)`](extras.md#set_device_withlenable-version0-int).
+**Note.** Requires the slideway to be enabled with [`set_device_withl(True, version=...)`](extras.md#set-device-withl).
 
 ---
 
@@ -226,5 +224,6 @@ The `PTPMode` enum (`from pydobotlab import PTPMode`) selects how the firmware i
 | `MOVJ_INC`     | 6     | Joint Δ      | Relative joint move (`Δj1..Δj4`). |
 | `MOVL_INC`     | 7     | Cartesian Δ  | Relative linear Cartesian move. |
 | `MOVJ_XYZ_INC` | 8     | Cartesian Δ  | Relative Cartesian joint-interp move. |
+| `JUMP_MOVL_XYZ` | 9 | Cartesian | JUMP with linear travel between lift and descent. |
 
 JUMP heights and the in-flight Z limit are configured via [`bot.jump_params`](speed.md#jump_params-property-tuplefloat-float).

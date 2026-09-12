@@ -60,6 +60,7 @@ nav:
       - "Running without hardware (simulator)": getting-started/simulator.md
       - "Linux setup (Ubuntu / Debian)": getting-started/linux.md
   - "API Reference":
+      - "DobotLab functions": api/dobotlab.md
       - "Overview": api/overview.md
       - "Connection lifecycle": api/connection.md
       - "Pose & motion": api/motion.md
@@ -83,6 +84,4 @@ nav:
       - "Command ID table": protocol/command-ids.md
       - "Method ↔ command mapping": protocol/method-to-cmd.md
       - "Alarm bitmask": protocol/alarms.md
-  - Project:
-      - Publishing: publishing.md
-      - Table of contents: SUMMARY.md
+  - "Table of contents": SUMMARY.md

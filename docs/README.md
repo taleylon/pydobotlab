@@ -1,6 +1,20 @@
 # pydobotlab - User Guide
 
-`pydobotlab` is a pure-Python control library and GUI for the **Dobot Magician** robot arm. It replaces the official DobotStudio / DobotLab desktop app with something students can drive from a Python script *and* a control panel at the same time.
+Python control for the **Dobot Magician**, with full coverage of the 28 Python
+API entries in the [official DobotLab Magician manual](https://cdn.release.dobot.cc/dobotlab-doc/dobotlab/coding-manual-en/20260205/Dobot%20Magician/Dobot%20Magician.html).
+Use the documented function names and arguments for motion, I/O, sensors,
+end-effectors, the slideway, and the conveyor.
+
+All ten `ptp` modes are supported. Extended control adds `move_to` with waiting,
+timeouts, and alarm handling, command batching, and live pose streaming. Run Python scripts
+and the optional desktop control panel separately or in parallel. A simulator
+supports working without hardware.
+
+Communicates over serial using `pyserial` and the
+[Dobot Communication Protocol V1.1.5](https://download.dobot.cc/product-manual/dobot-magician/pdf/en/Dobot-Communication-Protocol-V1.1.5.pdf);
+no vendor DLL or DobotStudio installation is required.
+
+[See all supported DobotLab functions](api/dobotlab.md).
 
 Browse the guide using the sidebar, search for an API method, or use the [table of contents](SUMMARY.md). The Markdown source lives in the [GitHub repository](https://github.com/taleylon/pydobotlab/tree/main/docs). If you're new, start with [Getting Started](getting-started/install.md). If you already know the SDK and just want to look up a command, jump to the [API Reference](api/overview.md).
 
@@ -50,5 +64,5 @@ The script-side and panel-side both speak through the same `Magician` class. Whe
 ## Quick links
 
 - Source code on disk: `pydobotlab/` (library), `pydobotlab/panel/` (GUI), `examples/`.
-- Protocol PDF reference: [Dobot Communication Protocol V1.1.5](https://www.alcom.no/wp-content/uploads/2019/11/Dobot-Communication-Protocol-V1.1.5-1.pdf) - the canonical source for command IDs and parameter layouts. Every page in the [Protocol Reference](protocol/frame-format.md) section cites it.
+- Protocol PDF reference: [Dobot Communication Protocol V1.1.5](https://download.dobot.cc/product-manual/dobot-magician/pdf/en/Dobot-Communication-Protocol-V1.1.5.pdf) - the canonical source for command IDs and parameter layouts. See the [Protocol Reference](protocol/frame-format.md) for packet details.
 - Magician feature page: [Dobot Magician - features](https://www.dobot-robots.com/products/education/magician.html).
