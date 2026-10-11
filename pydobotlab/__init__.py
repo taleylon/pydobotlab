@@ -26,6 +26,7 @@ from .errors import (
     DobotConnectionError,
     DobotError,
     DobotKinematicError,
+    DobotPermissionError,
     DobotPortInUseError,
     DobotProtocolError,
     DobotTimeoutError,
@@ -63,6 +64,7 @@ __all__ = [
     "DobotTimeoutError",
     "DobotConnectionError",
     "DobotPortInUseError",
+    "DobotPermissionError",
     "DobotAlarmError",
     "DobotKinematicError",
 ]
