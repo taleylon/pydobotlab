@@ -195,7 +195,9 @@ class HubWindow(QMainWindow):
         if devices:
             num_of_devices = len(devices)
             device_str = "device" if num_of_devices == 1 else "devices"
-            self.statusBar().showMessage(f"{num_of_devices} Dobot Magician {device_str} found", 3000)
+            self.statusBar().showMessage(
+                f"{num_of_devices} Dobot Magician {device_str} found", 3000
+            )
         elif failures:
             num_of_failures = len(failures)
             failure_str = "port" if num_of_failures == 1 else "ports"

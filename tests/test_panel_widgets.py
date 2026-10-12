@@ -17,6 +17,7 @@ def application(monkeypatch):
     application.processEvents()
 
 
+# fmt: off
 DIAGONAL = {
     "top":      ("X+", 1),
     "bottom":   ("X-", 2),
@@ -29,6 +30,7 @@ QUADRANT = {
     "bottom_left":  ("J2-", 3),
     "bottom_right": ("J2+", 4),
 }
+# fmt: on
 
 
 def press_and_release(pad, x_fraction, y_fraction):

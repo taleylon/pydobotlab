@@ -2,7 +2,7 @@
 
 On Linux a serial device such as ``/dev/ttyACM0`` is owned by a group
 (``dialout`` on Debian/Ubuntu) and a user can only open it after being
-added to that group, and starting a new login session. 
+added to that group, and starting a new login session.
 Opening without that fails with "permission denied".
 
 :func:`diagnose_port_permission` checks the device node itself instead of

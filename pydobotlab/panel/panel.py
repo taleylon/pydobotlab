@@ -226,6 +226,7 @@ class ControlPanel(QMainWindow):
         self._joint_readout = CoordReadout(["J1", "J2", "J3", "J4"])
 
         # Layout copied from the Windows DobotLab arm control panel.
+        # fmt: off
         self._xy_pad = JogPad(
             "X / Y",
             {
@@ -262,6 +263,7 @@ class ControlPanel(QMainWindow):
                 "bottom_right"  : ("J4+", JOGCmd.DP_DOWN),
             },
         )
+        # fmt: on
 
         # Cartesian row: [X/Y/Z/R readout | X/Y pad | Z/R pad]
         cart_row = QHBoxLayout()

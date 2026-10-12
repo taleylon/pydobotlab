@@ -43,7 +43,7 @@ from .protocol import Frame, pack, read_frame, unpack
 _REGISTRY_LOCK = threading.Lock()
 _OPEN_PORTS: set[str] = set()
 
-# Close transports explicitly at interpreter exit for scripts that omit ``disconnect()``, 
+# Close transports explicitly at interpreter exit for scripts that omit ``disconnect()``,
 # rather than relying on garbage collection, even though the OS releases per-process handles and locks when the process ends.
 _OPEN_TRANSPORTS: weakref.WeakSet[SerialTransport] = weakref.WeakSet()
 
