@@ -11,7 +11,8 @@ visual smoothness improvement are both directly comparable:
   LAZY (PTP)  - wrap the whole drawing in ``with bot.batch():``. Every
                 ``ptp(MOVL_XYZ, ...)`` is appended to the firmware queue
                 without running it; on block exit the firmware drains the
-                whole queue as one program. No more per-segment Python
+                whole queue as one program, and the block waits for it to
+                finish. No more per-segment Python
                 round-trip - but the firmware still treats each MOVL
                 segment as an independent trajectory that decelerates to
                 zero before the next starts, so on close inspection you
@@ -23,18 +24,17 @@ visual smoothness improvement are both directly comparable:
                 single smooth trajectory - the arm does NOT decelerate
                 between waypoints. This is the right tool for drawing.
 
-The script also **pre-validates the entire path** against a conservative
-workspace envelope before sending any frame. The Magician's parallelogram
-linkage forbids targets too close to the base column even when the
-cylindrical radius would suggest they're reachable - the geometry below
-sits comfortably outside that no-fly zone. If you change ``CENTER_X``,
-``FACE_RADIUS`` etc. and your edit pushes a point out, the pre-check
-prints exactly which waypoint is bad and aborts before the arm moves.
+The script also **pre-validates the entire path** against the workspace
+bounds in the ``[workspace]`` section of the pydobotlab configuration file
+before sending any frame. If you change ``CENTER_X``, ``FACE_RADIUS`` etc.
+and your edit pushes a point out, the pre-check prints exactly which
+waypoint is bad and aborts before the arm moves.
 
-After every batched run we also call ``bot.ensure_no_alarms()``. The
-firmware will occasionally silently drop CP segments it can't plan
-(without raising a hard error), so the post-check ensures the script
-fails loudly if the drawing didn't actually complete.
+A run raises ``DobotAlarmError`` as soon as the arm reports an alarm. After
+every run ``verify_clean()`` also reads the alarms: the firmware will
+occasionally silently drop CP segments it can't plan (without raising a
+hard error), so the post-check ensures the script fails loudly if the
+drawing didn't actually complete.
 
 Usage:
     python examples/draw_smiley.py
@@ -51,16 +51,16 @@ import sys
 import time
 
 from pydobotlab import Magician, PTPMode
+from pydobotlab.config import get_config
 from pydobotlab.errors import DobotAlarmError
 
 # ---------------------------------------------------------------------------
 # Geometry - millimetres, degrees.
 #
-# Defaults chosen so the entire smiley sits inside the Magician's reachable
-# annulus on real hardware (NOT just inside the simulator's cylindrical
-# bounds - the parallelogram linkage has a "no-fly" interior even within
-# the nominal radius). Closest point is (190, 0) ≈ 190 mm from the base;
-# farthest is (290, 0) ≈ 290 mm. Both well clear of the limits.
+# Defaults chosen so the entire smiley sits well inside the Magician's
+# workspace. Closest point is (190, 0), 190 mm from the base; farthest is
+# (290, 0), 290 mm. A smiley centred at (220, 0) with R=60 (closest point
+# 160 mm) failed mid-stroke on real hardware, so keep the face this far out.
 # ---------------------------------------------------------------------------
 
 CENTER_X = 240.0
@@ -83,44 +83,30 @@ DRAW_VELOCITY = 80.0
 
 
 # ---------------------------------------------------------------------------
-# Workspace envelope used by the pre-check. Conservative - strictly inside
-# the firmware's actual envelope so we leave a small safety margin. Tweak
-# WORKSPACE if your specific Magician has a different reach.
+# Workspace pre-check against the [workspace] bounds of the configuration file.
 # ---------------------------------------------------------------------------
-
-WORKSPACE = {
-    # The Magician's parallelogram-arm "no-fly zone" extends quite a bit
-    # further out than the nominal cylindrical inner radius - real-hardware
-    # testing showed an old smiley centred at (220, 0) with R=60 (closest
-    # point: 160 mm) failed mid-stroke. 180 mm is a safe lower bound on
-    # standard educational kits. If your specific arm reaches closer in,
-    # lower this; if it fails on the default geometry, raise it.
-    "min_radius_mm": 180.0,
-    "max_radius_mm": 300.0,  # outer reach on a Magician
-    "z_min_mm": -80.0,
-    "z_max_mm": 130.0,
-}
 
 
 class WorkspaceError(ValueError):
-    """A waypoint is outside the conservative workspace envelope."""
+    """A waypoint is outside the workspace bounds."""
 
 
-def check_workspace(points: list[tuple[float, float, float]], *, workspace=WORKSPACE) -> None:
-    """Raise WorkspaceError if any ``(x, y, z)`` point is out of bounds.
+def check_workspace(points: list[tuple[float, float, float]]) -> None:
+    """Raise WorkspaceError if any ``(x, y, z)`` point is outside the workspace bounds.
 
     Pre-validating EVERY waypoint before sending a single frame is the only
     reliable way to catch a bad smiley on real hardware: the firmware may
     silently drop unreachable CP segments instead of setting an alarm bit,
     so the queue drains "successfully" but the picture is incomplete.
     """
+    workspace = get_config()["workspace"]
     bad: list[tuple[int, tuple[float, float, float], str]] = []
     for i, (x, y, z) in enumerate(points):
         r = math.hypot(x, y)
         problems = []
         if r < workspace["min_radius_mm"]:
             problems.append(
-                f"too close to base column ({r:.1f} mm < {workspace['min_radius_mm']:.0f} mm)"
+                f"too close to the base ({r:.1f} mm < {workspace['min_radius_mm']:.0f} mm)"
             )
         if r > workspace["max_radius_mm"]:
             problems.append(
@@ -133,18 +119,16 @@ def check_workspace(points: list[tuple[float, float, float]], *, workspace=WORKS
         if problems:
             bad.append((i, (x, y, z), "; ".join(problems)))
     if bad:
-        msg = (
-            f"{len(bad)} of {len(points)} waypoints are outside the conservative "
-            f"workspace envelope:\n"
-            + "\n".join(
-                f"  pt #{i}  ({x:.1f}, {y:.1f}, {z:.1f})  →  {why}" for i, (x, y, z), why in bad[:5]
-            )
-            + ("\n  …" if len(bad) > 5 else "")
-            + "\n\nAdjust CENTER_X / FACE_RADIUS so every point's radius is "
-            f"between {workspace['min_radius_mm']:.0f} and "
-            f"{workspace['max_radius_mm']:.0f} mm."
+        lines = [
+            f"  pt #{i}  ({x:.1f}, {y:.1f}, {z:.1f})  ->  {why}" for i, (x, y, z), why in bad[:5]
+        ]
+        if len(bad) > 5:
+            lines.append("  ...")
+        lines.append("Adjust CENTER_X / FACE_RADIUS / Z_DRAW to move every point inside.")
+        raise WorkspaceError(
+            f"{len(bad)} of {len(points)} waypoints are outside the workspace bounds:\n"
+            + "\n".join(lines)
         )
-        raise WorkspaceError(msg)
 
 
 # ---------------------------------------------------------------------------
@@ -243,13 +227,11 @@ def draw_lazy(bot: Magician) -> None:
             for x, y in stroke[1:]:
                 bot.ptp(PTPMode.MOVL_XYZ, x, y, Z_DRAW, 0.0)
             bot.ptp(PTPMode.MOVL_XYZ, x, y, Z_TRAVEL, 0.0)
-
-    t_stack1 = time.monotonic()
-    print(f"  [lazy] queued in {t_stack1 - t_stack0:.2f}s. Firmware draining...")
-    t_run0 = time.monotonic()
-    bot.wait_idle(timeout=300)
+        t_stack1 = time.monotonic()
+        print(f"  [lazy] queued in {t_stack1 - t_stack0:.2f}s. Firmware draining...")
+    # The end of the batch block waits until the drawing is finished.
     t_run1 = time.monotonic()
-    print(f"  [lazy] firmware finished drawing in {t_run1 - t_run0:.1f}s")
+    print(f"  [lazy] firmware finished drawing in {t_run1 - t_stack1:.1f}s")
     print(f"  [lazy] total wall-clock: {t_run1 - t_stack0:.1f}s")
 
 
@@ -273,22 +255,20 @@ def draw_continuous(bot: Magician) -> None:
             for x, y in stroke[1:]:
                 bot.cp(x, y, Z_DRAW, velocity=DRAW_VELOCITY)
             bot.ptp(PTPMode.MOVL_XYZ, x, y, Z_TRAVEL, 0.0)
-
-    t_stack1 = time.monotonic()
-    print(f"  [cp] queued in {t_stack1 - t_stack0:.2f}s. Firmware draining...")
-    t_run0 = time.monotonic()
-    bot.wait_idle(timeout=300)
+        t_stack1 = time.monotonic()
+        print(f"  [cp] queued in {t_stack1 - t_stack0:.2f}s. Firmware draining...")
+    # The end of the batch block waits until the drawing is finished.
     t_run1 = time.monotonic()
-    print(f"  [cp] firmware finished drawing in {t_run1 - t_run0:.1f}s")
+    print(f"  [cp] firmware finished drawing in {t_run1 - t_stack1:.1f}s")
     print(f"  [cp] total wall-clock: {t_run1 - t_stack0:.1f}s")
 
 
 # ---------------------------------------------------------------------------
 # Post-run integrity check. The firmware sometimes silently drops a CP
 # segment it can't plan (no alarm raised, no error returned, the queue
-# index advances anyway). Calling ensure_no_alarms() AFTER wait_idle()
-# catches the obvious "the firmware aborted with an alarm bit" case. For
-# the truly silent failure case our only line of defence is the pre-check.
+# index advances anyway). Reading the alarms after the run catches the
+# "the firmware aborted with an alarm bit" case. For the truly silent
+# failure case our only line of defence is the pre-check.
 # ---------------------------------------------------------------------------
 
 
@@ -344,7 +324,7 @@ def main() -> int:
     # 1. Pre-check the geometry BEFORE opening the port. If the geometry is
     #    wrong, we don't even want to home - fail fast with the bad point.
     waypoints = all_waypoints()
-    print(f"validating {len(waypoints)} waypoints against the workspace envelope...")
+    print(f"validating {len(waypoints)} waypoints against the arm's workspace...")
     try:
         check_workspace(waypoints)
     except WorkspaceError as e:
