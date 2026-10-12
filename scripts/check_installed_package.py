@@ -10,6 +10,7 @@ from pydobotlab.simulator import install_simulator, stop_all
 
 assert pydobotlab.__version__ == version("pydobotlab")
 assert files("pydobotlab.panel").joinpath("style.qss").read_text(encoding="utf-8").strip()
+assert files("pydobotlab").joinpath("config.toml").read_text(encoding="utf-8").strip()
 assert parse_arguments(["--simulator"]).simulator
 entry_points = distribution("pydobotlab").entry_points
 assert any(entry.name == "pydobotlab-panel" and callable(entry.load()) for entry in entry_points)
