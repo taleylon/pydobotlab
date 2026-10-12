@@ -1,8 +1,8 @@
 # Connecting to an arm
 
-## The simplest case - auto-pick
+## Automatic port selection
 
-If you have one arm plugged in, this is enough:
+Without a `port` argument, `Magician` probes the serial ports and uses the first one that answers as a Dobot. See [Discovery](../api/discovery.md).
 
 ```python
 from pydobotlab import Magician
@@ -11,81 +11,59 @@ with Magician() as bot:
     print(bot.get_pose())
 ```
 
-`Magician()` with no `port` argument scans the OS's serial devices, sends a probe frame to each candidate, and uses the first one that answers like a Dobot. The port discovery logic is documented in detail under [Discovery](../api/discovery.md).
-
 ## Specifying a port
 
-If you have several arms, or want to be explicit, pass the port name:
+Pass the port name to select an arm explicitly, for example when several arms are connected.
 
 ```python
-bot = Magician(port="/dev/ttyUSB0")  # macOS / Linux
+bot = Magician(port="/dev/ttyUSB0")  # macOS and Linux
 bot = Magician(port="COM3")  # Windows
 bot.connect()
-# … use it …
+# ...
 bot.disconnect()
 ```
 
-Or as a context manager (auto-disconnect on exit):
+`with` calls `connect` on entry and `disconnect` on exit:
 
 ```python
 with Magician(port="COM3") as bot:
     bot.set_home()
 ```
 
-## Connection options
+The remaining constructor options (broker routing, timeouts, logging) are listed under [`Magician`](../api/magician.md#magician). Default settings come from a [configuration file](../api/config.md).
 
-`Magician(...)` accepts:
+## Multiple arms
 
-| Argument              | Default       | What it does |
-|-----------------------|---------------|--------------|
-| `port`                | `None`        | OS serial device path. `None` = auto-pick. |
-| `baudrate`            | `115200`      | Only baud rate the firmware speaks; rarely overridden. |
-| `timeout`             | `1.0`         | Per-byte read timeout (seconds). |
-| `auto_start_queue`    | `True`        | After opening, clear & start the firmware queue. Set `False` if you want manual control. |
-| `only_known_adapters` | `False`       | When auto-picking, restrict to USB adapters known to be Dobot (CH340, Silicon Labs CP21xx). |
-| `via_broker`          | `"auto"`      | `"auto"` = use a running broker if one is reachable, else direct serial. `True` = require broker. `False` = always direct. |
-| `broker_host`         | `"127.0.0.1"` | Broker host (only relevant if `via_broker` allows broker). |
-| `broker_port`         | `8765`        | Broker TCP port. |
-
-## Multiple arms in one script
-
-`Magician` instances are completely independent - each owns its own serial port (or its own broker channel). You can drive several arms in parallel from the same script:
+Each `Magician` instance owns one port, so several arms can be driven from one script:
 
 ```python
-from pydobotlab import Magician
 import threading
+
+from pydobotlab import Magician
 
 
 def run(port, label):
     with Magician(port=port) as bot:
         bot.set_home()
-        bot.move_to(200, 0, 0, 0)
+        bot.ptp(mode=1, x=200, y=0, z=0, r=0)  # MOVJ_XYZ
         print(label, bot.get_pose())
 
 
-t1 = threading.Thread(target=run, args=("/dev/ttyUSB0", "left"))
-t2 = threading.Thread(target=run, args=("/dev/ttyUSB1", "right"))
-t1.start()
-t2.start()
-t1.join()
-t2.join()
+left = threading.Thread(target=run, args=("/dev/ttyUSB0", "left"))
+right = threading.Thread(target=run, args=("/dev/ttyUSB1", "right"))
+left.start()
+right.start()
+left.join()
+right.join()
 ```
 
-See `examples/multi_dobot.py` and `examples/two_dobots_with_panels.py` for fuller examples.
+`mode=1` selects a joint-interpolated move to a Cartesian target. See [`PTPMode`](../api/motion.md#ptpmode). Complete examples are in `examples/multi_dobot.py` and `examples/two_dobots_with_panels.py`.
 
-## Sharing one arm with the control panel
+## Sharing an arm with the control panel
 
-If `pydobotlab-panel` is already running, start your script normally - `Magician()` will detect the broker on `127.0.0.1:8765` and route through it automatically. Both the panel's live readout and your script's commands will be interleaved on the same arm.
-
-```python
-# Panel running in another terminal? Same code as before - no change needed.
-with Magician(port="COM3") as bot:
-    bot.move_to(200, 0, 0, 0)
-```
-
-For the gritty details of how broker routing works, see [The DobotBroker](../panel/broker.md).
+While `pydobotlab-panel` is running, `Magician` connects through the panel's broker on `127.0.0.1:8765` and no code change is needed. The panel and the script then control the same arm. See [The DobotBroker](../panel/broker.md).
 
 ## Next
 
-* [Hello, Magician - your first script →](first-script.md)
-* [Running without hardware (simulator) →](simulator.md)
+- [Hello, Magician](first-script.md)
+- [Running without hardware](simulator.md)

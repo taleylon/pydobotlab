@@ -1,7 +1,7 @@
-"""HubWindow - small device picker that spawns per-arm ControlPanel windows.
+"""Device hub for launching a separate ControlPanel window for each arm.
 
-Closing the hub closes the whole app; closing a panel only disconnects that
-arm and lets the user re-open it from the hub later.
+Closing the hub exits the application. Closing an individual panel disconnects
+only its arm and allows the panel to be reopened from the hub.
 """
 
 from __future__ import annotations
@@ -10,12 +10,12 @@ from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
-    QListWidget,
-    QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QPushButton,
     QStatusBar,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -24,6 +24,7 @@ from pydobotlab import Discovery
 from pydobotlab.transport import is_port_claimed
 
 from .panel import ControlPanel
+from .widgets import version_label
 
 
 class DiscoveryWorker(QThread):
@@ -32,7 +33,7 @@ class DiscoveryWorker(QThread):
     We use the diagnostic form so the hub can surface ports we *tried* but
     couldn't open - e.g. a /dev/ttyACM0 the current user can't access. The
     plain discover() would drop them silently and the user gets a useless
-    "no Dobots found" with no hint to try `sudo usermod -aG dialout $USER`.
+    "no devices found" with no hint to try `sudo usermod -aG dialout $USER`.
     """
 
     finished_with = Signal(list, list)  # (hits, failures)
@@ -47,7 +48,7 @@ class DiscoveryWorker(QThread):
 
 
 class HubWindow(QMainWindow):
-    """Lists discovered Dobots; clicking 'Open' spawns a ControlPanel."""
+    """Lists discovered Dobot Magicians; clicking 'Open' spawns a ControlPanel."""
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -55,7 +56,8 @@ class HubWindow(QMainWindow):
         self.resize(560, 380)
 
         self._panels: dict[str, ControlPanel] = {}  # port -> panel
-        self._worker: DiscoveryWorker | None = None
+        self._worker: DiscoveryWorker | None = None  # the running scan, if any
+        self._rescan_requested: bool = False  # refresh() was called during a scan
 
         self.build_ui()
         self.refresh()
@@ -79,7 +81,10 @@ class HubWindow(QMainWindow):
         header.addWidget(self._refresh_button)
         root.addLayout(header)
 
-        self._device_list = QListWidget()
+        self._device_list = QTreeWidget()
+        self._device_list.setHeaderHidden(True)
+        self._device_list.setExpandsOnDoubleClick(False)
+        self._device_list.itemClicked.connect(self.toggle_group)
         self._device_list.itemDoubleClicked.connect(self.open_item_panel)
         root.addWidget(self._device_list, stretch=1)
 
@@ -93,14 +98,21 @@ class HubWindow(QMainWindow):
         root.addLayout(actions)
 
         self._device_list.itemSelectionChanged.connect(
-            lambda: self._open_button.setEnabled(bool(self._device_list.currentItem()))
+            lambda: self._open_button.setEnabled(self.selected_port() is not None)
         )
 
         self.setStatusBar(QStatusBar())
+        self._version_label = version_label()
+        self.statusBar().addPermanentWidget(self._version_label)
 
     # ---- Discovery ---------------------------------------------------------
 
     def refresh(self) -> None:
+        # One scan at a time: two scans would open the same ports at once, and
+        # each would see the ports the other holds as busy.
+        if self._worker is not None:
+            self._rescan_requested = True
+            return
         self.statusBar().showMessage("scanning serial ports...")
         self._refresh_button.setEnabled(False)
         self._device_list.clear()
@@ -109,71 +121,117 @@ class HubWindow(QMainWindow):
         self._worker.error.connect(self.show_discovery_error)
         self._worker.start()
 
-    def show_discovery_results(self, devices: list, failures: list = None) -> None:
-        failures = failures or []
-        self._refresh_button.setEnabled(True)
+    def finish_scan(self) -> bool:
+        """End the current scan; ``False`` if a requested re-scan replaces its results."""
         self._worker = None
-        if not devices:
-            if failures:
-                # Show the ports we did try, with the reason each was rejected.
-                # This is the difference between "we couldn't find anything" and
-                # "we tried /dev/ttyACM0 but you need sudo to talk to it".
-                header = QListWidgetItem("No Dobots answered. Tried these ports:")
-                header.setFlags(Qt.NoItemFlags)
-                header.setForeground(Qt.gray)
-                self._device_list.addItem(header)
-                for failure in failures:
-                    hint = {
-                        "permission": "permission denied - try "
-                        "'sudo usermod -aG dialout $USER' then log out & back in",
-                        "busy": "port busy - close DobotStudio, another panel, "
-                        "or stop brltty: 'sudo systemctl stop brltty'",
-                        "no_reply": "opened but didn't answer (wrong device, or arm asleep)",
-                        "other": "couldn't open",
-                    }.get(failure.reason, failure.reason)
-                    item = QListWidgetItem(f"   {failure.port}    {hint}")
-                    item.setFlags(Qt.NoItemFlags)
-                    item.setForeground(Qt.gray)
-                    item.setToolTip(failure.detail)
-                    self._device_list.addItem(item)
-                self.statusBar().showMessage(
-                    f"no Dobots answered; {len(failures)} port(s) tried - hover for details", 6000
-                )
-            else:
-                empty = QListWidgetItem("No Dobots found. Check the USB cable, then click Refresh.")
-                empty.setFlags(Qt.NoItemFlags)
-                empty.setForeground(Qt.gray)
-                self._device_list.addItem(empty)
-                self.statusBar().showMessage("no Dobots found", 3000)
+        if self._rescan_requested:
+            self._rescan_requested = False
+            self.refresh()
+            return False
+        self._refresh_button.setEnabled(True)
+        self._device_list.clear()
+        return True
+
+    def add_note(self, text: str, tooltip: str = "", parent=None) -> QTreeWidgetItem:
+        """Add a grey row that cannot be selected, under ``parent`` or at the top level."""
+        item = QTreeWidgetItem([text])
+        item.setFlags(Qt.NoItemFlags)
+        item.setForeground(0, Qt.gray)
+        item.setToolTip(0, tooltip)
+        if parent is None:
+            self._device_list.addTopLevelItem(item)
+        else:
+            parent.addChild(item)
+        return item
+
+    def show_discovery_results(self, devices: list, failures: list = None) -> None:
+        if not self.finish_scan():
             return
+        failures = failures or []
+        other_devices = [failure for failure in failures if failure.reason == "no_reply"]
+        open_failures = [failure for failure in failures if failure.reason != "no_reply"]
+
         for device in devices:
-            label = f"{device.port}    serial: {device.serial_number or '?'}"
-            item = QListWidgetItem(label)
-            item.setData(Qt.UserRole, device.port)
+            item = QTreeWidgetItem([device.port])
+            item.setData(0, Qt.UserRole, device.port)
             if device.port in self._panels and self._panels[device.port].isVisible():
-                item.setText(label + "    [panel open]")
-                item.setForeground(Qt.gray)
+                item.setText(0, f"{device.port}    [panel open]")
+                item.setForeground(0, Qt.gray)
             elif is_port_claimed(device.port):
-                item.setText(label + "    [in use elsewhere]")
-                item.setForeground(Qt.gray)
-            self._device_list.addItem(item)
-        self.statusBar().showMessage(f"{len(devices)} device(s) found", 3000)
+                item.setText(0, f"{device.port}    [in use elsewhere]")
+                item.setForeground(0, Qt.gray)
+            self._device_list.addTopLevelItem(item)
+
+        if not devices:
+            self.add_note(
+                "No Dobot Magician devices were found.\n"
+                "Check the USB cable and power, then click Refresh."
+            )
+            # A port that could not be opened may still hold a Magician. Permission
+            # failures share one cause (e.g. missing dialout group), so the
+            # explanation is shown once instead of once per port.
+            permission_failures = [f for f in open_failures if f.reason == "permission"]
+            if permission_failures:
+                ports = ", ".join(f.port for f in permission_failures)
+                self.add_note(permission_failures[0].detail, f"Affected ports: {ports}")
+            for failure in open_failures:
+                if failure.reason == "permission":
+                    continue
+                hint = {"busy": "port is busy", "other": "couldn't open"}.get(
+                    failure.reason, failure.reason
+                )
+                self.add_note(f"{failure.port}    {hint}", failure.detail)
+
+        # Ports that answered, but not as a Dobot Magician: collapsed by default.
+        group = QTreeWidgetItem([f"Other devices ({len(other_devices)})"])
+        group.setFlags(Qt.ItemIsEnabled)
+        group.setForeground(0, Qt.gray)
+        self._device_list.addTopLevelItem(group)
+        for failure in other_devices:
+            description = failure.description.removesuffix(f" ({failure.port})")
+            text = f"{failure.port}    {description}" if description else failure.port
+            self.add_note(text, failure.detail, parent=group)
+
+        if devices:
+            num_of_devices = len(devices)
+            device_str = "device" if num_of_devices == 1 else "devices"
+            self.statusBar().showMessage(
+                f"{num_of_devices} Dobot Magician {device_str} found", 3000
+            )
+        elif failures:
+            num_of_failures = len(failures)
+            failure_str = "port" if num_of_failures == 1 else "ports"
+            self.statusBar().showMessage(
+                f"no Dobot Magician devices found; {len(failures)} {failure_str} tried"
+                " - hover for details",
+                6000,
+            )
+        else:
+            self.statusBar().showMessage("no Dobot Magician devices found", 3000)
 
     def show_discovery_error(self, message: str) -> None:
-        self._refresh_button.setEnabled(True)
-        self._worker = None
+        if not self.finish_scan():
+            return
         self.statusBar().showMessage(f"discovery failed: {message}", 5000)
 
     # ---- Open panel --------------------------------------------------------
 
-    def open_selected_panel(self) -> None:
+    def selected_port(self) -> str | None:
+        """Port of the selected Dobot Magician, or ``None``."""
         item = self._device_list.currentItem()
-        if item is None:
-            return
-        self.open_panel(item.data(Qt.UserRole))
+        return item.data(0, Qt.UserRole) if item is not None else None
 
-    def open_item_panel(self, item: QListWidgetItem) -> None:
-        port = item.data(Qt.UserRole)
+    def toggle_group(self, item: QTreeWidgetItem, column: int = 0) -> None:
+        if item.childCount():
+            item.setExpanded(not item.isExpanded())
+
+    def open_selected_panel(self) -> None:
+        port = self.selected_port()
+        if port:
+            self.open_panel(port)
+
+    def open_item_panel(self, item: QTreeWidgetItem, column: int = 0) -> None:
+        port = item.data(0, Qt.UserRole)
         if port:
             self.open_panel(port)
 

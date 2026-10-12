@@ -1,65 +1,52 @@
 # Installation
 
-`pydobotlab` is a pure-Python package. The only hard runtime dependency is `pyserial`. The control panel adds a soft dependency on `PySide6` (Qt for Python).
+pydobotlab requires Python 3.11 or newer. Its only required dependency is `pyserial`. The control panel also requires `PySide6`.
 
-## Make a virtual environment
+## Create a virtual environment
 
-We strongly recommend installing into a virtual environment so the package and its dependencies don't conflict with anything else on your machine.
-
-### macOS / Linux
+macOS and Linux:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-### Windows (PowerShell)
+Windows (PowerShell):
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
-You'll know the venv is active because your shell prompt shows `(.venv)`.
-
-## Install pydobotlab
-
-Requires Python 3.10 or newer. Install the published package from PyPI:
+## Install
 
 ```bash
 python -m pip install pydobotlab
 ```
 
-To work from source before the first release, run
-`python -m pip install -e .` from the project root (where `pyproject.toml` lives).
-
-This installs the library plus its console scripts (`pydobotlab-panel`).
-
-If you want the **control panel GUI**, install the GUI extra:
+To use the control panel (`pydobotlab-panel`), install the `gui` extra:
 
 ```bash
 python -m pip install "pydobotlab[gui]"
 ```
 
-The library itself works without PySide6 - it's only required for the panel.
+To install from a source checkout, run `python -m pip install -e .` in the directory that contains `pyproject.toml`.
 
-## Verify the install
+## Verify
 
 ```bash
 python -c "import pydobotlab; print(pydobotlab.__version__)"
 ```
 
-Should print a version number (e.g. `0.1.0`).
+The command prints the installed version.
 
-## Connect the arm (optional, can come later)
+## Check that the arm is visible
 
-Plug a real Magician into a USB port and check that your OS can see it:
+- macOS and Linux: run `ls /dev/tty.usbserial-* /dev/ttyUSB* /dev/ttyACM*`. The arm appears as `/dev/ttyUSB0` or `/dev/ttyACM0`. See [Linux setup](linux.md) for the required permissions.
+- Windows: open Device Manager, then Ports (COM & LPT), and note the COM number, for example `COM3`.
 
-* **macOS / Linux**: `ls /dev/tty.usbserial-* /dev/ttyUSB* /dev/ttyACM*` - you should see the device. Note: on Ubuntu the Magician often shows up as `/dev/ttyACM0` (the CDC ACM driver) rather than `/dev/ttyUSB0`; both work. See [Linux setup](linux.md) for the dialout/brltty fixes you'll need first.
-* **Windows**: open Device Manager → Ports (COM & LPT) - note the COM number (e.g. `COM3`).
-
-If you don't have a real arm yet, the [simulator](simulator.md) lets you run everything in this guide without one.
+Without an arm, use the [simulator](simulator.md).
 
 ## Next
 
-* [Connecting to an arm →](connect.md)
+- [Connecting to an arm](connect.md)

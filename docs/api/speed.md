@@ -1,123 +1,134 @@
-# Speed & motion parameters
+# Motion parameters
 
-The arm has independent velocity / acceleration ratios for **PTP** (trajectory moves) and **JOG** (live nudges), plus JUMP-mode parameters for pick-and-place trajectories. All "ratios" are percentages of the firmware's internal baseline (`0..100`); the control panel's speed slider drives them.
+Set and read velocity, acceleration, JUMP, and continuous-path parameters.
+
+| Member | Description |
+|---|---|
+| [`Magician.motion_params`](#motion_params) | Point-to-point velocity and acceleration ratios. |
+| [`Magician.jump_params`](#jump_params) | JUMP Z limit and lift height. |
+| [`Magician.set_jog_common_params`](#set_jog_common_params) | Set jog velocity and acceleration ratios. |
+| [`Magician.get_jog_common_params`](#get_jog_common_params) | Read jog velocity and acceleration ratios. |
+| [`Magician.get_arm_speed_ratio`](#get_arm_speed_ratio) | Read the jog or point-to-point velocity ratio. |
+| [`Magician.set_cp_params`](#set_cp_params) | Set continuous-path planning parameters. |
+
+Slideway velocity is set with [`set_ptpl_params`](accessories.md#set_ptpl_params).
 
 ---
 
-## `motion_params` *(property)* - `tuple[float, float]`
-
-**Purpose.** Read or write the global PTP velocity and acceleration ratios.
-
-**Getter - Returns.** `(vel_ratio, acc_ratio)` as floats `0..100`.
-
-**Setter - Inputs.** `(vel_ratio, acc_ratio)`. Each is clamped to `0..100` server-side.
-
-**Protocol.** [`GET_SET_PTP_COMMON_PARAMS`](../protocol/command-ids.md) (83). Get is read + immediate. Set is write + queued; param: `float32 vel | float32 acc`.
-
-**Example.**
+## `Magician.motion_params` {#motion_params}
 
 ```python
-bot.motion_params = (50.0, 50.0)  # half-speed PTP
-print(bot.motion_params)  # (50.0, 50.0)
+Magician.motion_params: tuple[float, float]
+```
+
+Velocity and acceleration ratios for point-to-point moves, in percent.
+
+Reading returns `(velocity, acceleration)`. Assigning a pair sets the new values and waits until the arm applies them; inside [`batch`](queue.md#batch), the values are queued. Assigning raises a [`DobotAlarmError`](errors.md#dobotalarmerror) subclass if the arm reports an alarm.
+
+**Example**
+
+```python
+bot.motion_params = 50, 50
+velocity, acceleration = bot.motion_params
 ```
 
 ---
 
-## `jump_params` *(property)* - `tuple[float, float]`
-
-**Purpose.** Read or write the JUMP-mode parameters (`zlimit`, `height`).
-
-* `height` - how far above the *higher* of the two endpoints the arm lifts before flying across.
-* `zlimit` - an absolute upper Z bound the trajectory may never exceed.
-
-The setter takes them in that **API order** (`zlimit, height`); the wire frame swaps to the official `(height, zlimit)` layout internally.
-
-**Getter - Returns.** `(zlimit, height)` floats (mm).
-
-**Setter - Inputs.** `(zlimit, height)`.
-
-**Protocol.** [`GET_SET_PTP_JUMP_PARAMS`](../protocol/command-ids.md) (82). Get is read + immediate. Set is write + queued; wire param: `float32 jumpHeight | float32 zLimit` (8 bytes).
-
-**Example.**
+## `Magician.jump_params` {#jump_params}
 
 ```python
-bot.jump_params = (150.0, 30.0)  # zlimit = 150 mm, lift height = 30 mm
+Magician.jump_params: tuple[float, float]
+```
+
+Parameters of `JUMP` point-to-point moves, as `(zlimit, height)`.
+
+| Element | Description |
+|---|---|
+| `zlimit` | Maximum Z of the trajectory, mm. |
+| `height` | Lift height above the higher endpoint, mm. |
+
+Reading returns `(zlimit, height)`. Assigning a pair sets the new values in the same way as [`motion_params`](#motion_params).
+
+**Example**
+
+```python
+bot.jump_params = 150, 30
 ```
 
 ---
 
-## `set_jog_common_params(vel_ratio, acc_ratio) -> int`
+## `Magician.set_jog_common_params` {#set_jog_common_params}
 
-**Purpose.** Global JOG velocity / acceleration percentage (`0..100`). The panel's speed slider sends this whenever it moves so jogs honour the same setting as PTP.
+```python
+Magician.set_jog_common_params(vel_ratio, acc_ratio) -> int
+```
 
-**Inputs.** Both `float`, clamped to `0..100`.
+Set the velocity and acceleration ratios for jogging.
 
-**Returns.** `int` queued-command index.
+**Parameters**
 
-**Protocol.** [`GET_SET_JOG_COMMON_PARAMS`](../protocol/command-ids.md) (72), write + queued. Param: `float32 vel | float32 acc`.
+| Name | Type | Description |
+|---|---|---|
+| `vel_ratio` | `float` | Velocity ratio, percent. |
+| `acc_ratio` | `float` | Acceleration ratio, percent. |
 
----
-
-## `get_jog_common_params() -> tuple[float, float]`
-
-**Purpose.** Read back the current `(vel_ratio, acc_ratio)` for JOG.
-
-**Returns.** `(float, float)`.
-
-**Protocol.** [`GET_SET_JOG_COMMON_PARAMS`](../protocol/command-ids.md) (72), read + immediate. Response payload: 2 little-endian `float32`.
+**Returns** `int`: queue index of the command.
 
 ---
 
-## `get_arm_speed_ratio(mode) -> float`
+## `Magician.get_jog_common_params` {#get_jog_common_params}
 
-**Purpose.** Convenience accessor for whichever common-params velocity matters in `mode`.
+```python
+Magician.get_jog_common_params() -> tuple[float, float]
+```
 
-**Inputs.** `mode: int` - `0` = JOG, `1` = PTP.
+Read the velocity and acceleration ratios for jogging.
 
-**Returns.** `float` velocity ratio `0..100`.
-
-**Protocol.** Issues a single read of either [`GET_SET_JOG_COMMON_PARAMS`](../protocol/command-ids.md) (72) or [`GET_SET_PTP_COMMON_PARAMS`](../protocol/command-ids.md) (83) depending on `mode`.
-
----
-
-## `set_cp_params(plan_acc, junction_vel, acc=0.0, *, real_time_track=False) -> int`
-
-**Purpose.** Tune the Continuous Path planner. Used together with [`cp()`](motion.md#cpx-y-z-velocity1000-mode1-int) to draw smooth blended trajectories without per-segment deceleration.
-
-**Inputs.**
-
-| Arg | Type | Default | Meaning |
-|-----|------|---------|---------|
-| `plan_acc` | `float` | – | Planning acceleration (mm/s²) used by the trajectory planner when smoothing corners. Higher = sharper corners. |
-| `junction_vel` | `float` | – | Maximum velocity (mm/s) preserved through a corner. Lower = slower, smoother corners. |
-| `acc` | `float` | `0.0` | Execution acceleration limit (mm/s²). `0.0` = firmware default. |
-| `real_time_track` | `bool` | `False` | Almost never used. When `True`, the firmware streams CP execution position back via the alarms register. |
-
-**Returns.** `int` queued-command index.
-
-**Protocol.** [`GET_SET_CP_PARAMS`](../protocol/command-ids.md) (90), write + queued. Param: `f32 planAcc | f32 junctionVel | f32 acc | u8 realTimeTrack` (13 bytes).
-
-**Typical values.** `(plan_acc=200, junction_vel=200, acc=200)` gives clean corners at modest speeds. Lower both `plan_acc` and `junction_vel` if you want very smooth arcs at the cost of speed.
+**Returns** `tuple[float, float]`: `(vel_ratio, acc_ratio)`, in percent.
 
 ---
 
-## `set_ptpl_params(vel, accel) -> int`
+## `Magician.get_arm_speed_ratio` {#get_arm_speed_ratio}
 
-**Purpose.** Slideway max velocity and acceleration percentages (`1..100`).
+```python
+Magician.get_arm_speed_ratio(mode) -> float
+```
 
-**Inputs.** Both `float`.
+Read the velocity ratio for jogging or point-to-point moves.
 
-**Returns.** `int` queued-command index.
+**Parameters**
 
-**Protocol.** [`GET_SET_PTP_L_PARAMS`](../protocol/command-ids.md) (85), write + queued.
+| Name | Type | Description |
+|---|---|---|
+| `mode` | `int` | `0` for jogging, `1` for point-to-point moves. |
+
+**Returns** `float`: velocity ratio, percent.
 
 ---
 
-## A note on baselines
+## `Magician.set_cp_params` {#set_cp_params}
 
-Each ratio is multiplied by an internal "100% velocity" baseline:
+```python
+Magician.set_cp_params(plan_acc, junction_vel, acc=0.0, *, real_time_track=False) -> int
+```
 
-* **PTP**: 200 mm/s (firmware default).
-* **JOG**: 200 mm/s for X/Y/Z, 90 °/s for R and joints.
+Set continuous-path planning parameters.
 
-So `motion_params = (50, 50)` at the firmware's defaults gives ~100 mm/s in PTP; `set_jog_common_params(25, 25)` gives ~50 mm/s in JOG. (The simulator uses the same baselines.)
+**Parameters**
+
+| Name | Type | Description |
+|---|---|---|
+| `plan_acc` | `float` | Planning acceleration, mm/s². Higher values give sharper corners. |
+| `junction_vel` | `float` | Maximum velocity through a corner, mm/s. |
+| `acc` | `float`, default `0.0` | Execution acceleration limit, mm/s². `0.0` uses the firmware default. |
+| `real_time_track` | `bool`, default `False` | Enable real-time tracking mode. |
+
+**Returns** `int`: queue index of the command.
+
+**See also** [`cp`](motion.md#cp).
+
+**Example**
+
+```python
+bot.set_cp_params(plan_acc=200, junction_vel=200, acc=200)
+```

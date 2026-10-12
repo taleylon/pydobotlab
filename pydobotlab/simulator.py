@@ -4,7 +4,7 @@ Activate with::
 
     pydobotlab-panel --simulator
 
-…or programmatically::
+or programmatically::
 
     from pydobotlab.simulator import install_simulator
     install_simulator(arms=2)
@@ -18,10 +18,10 @@ What it does
   returns a synthetic response from a virtual arm.
 * Monkey-patches ``serial.tools.list_ports.comports()`` so the discovery
   layer sees N fake ports (``/dev/sim0``, ``/dev/sim1``, ...).
-* Each fake arm has its own pose (initially home), interpolates toward
-  PTP / HOME targets in a daemon thread at ~30 Hz so the panel's pose
-  readout actually animates, and tracks a queue index so ``wait_idle``
-  works.
+* Each fake arm has its own pose (initially home) and a command queue that
+  runs in order in a daemon thread: moves interpolate so the panel's pose
+  readout animates, other commands take effect when they reach the head.
+  Like the real arm, the queue does not run while an alarm is active.
 
 It's intentionally additive: nothing in the rest of the library knows
 the simulator exists. Without ``--simulator`` (or ``install_simulator()``
@@ -33,9 +33,12 @@ from __future__ import annotations
 import math
 import struct
 import threading
+from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from .commands import CommandID
+from .config import get_config
 from .protocol import (
     CTRL_QUEUED,
     CTRL_RW,
@@ -48,28 +51,76 @@ from .protocol import (
     unpack as unpack,
 )
 
-# Bounds of the simulated arm's reachable workspace, used to trigger
-# PLAN_MOTION_TARGET_OUT_OF_WORKSPACE on out-of-reach PTP targets so
-# students can test their error-handling code without real hardware.
-SIM_WORKSPACE = {
-    "min_radius_mm": 80.0,  # cylindrical reach (sqrt(x^2 + y^2))
-    "max_radius_mm": 320.0,
-    "z_min_mm": -90.0,
-    "z_max_mm": 150.0,
-}
-
-
-# Alarm bit set when a target falls outside SIM_WORKSPACE - matches the
-# real firmware's PLAN_MOTION_TARGET_OUT_OF_WORKSPACE code (0x14).
+# Alarm bit set when a target is outside the workspace. Matches the real
+# firmware's PLAN_MOTION_TARGET_OUT_OF_WORKSPACE code (0x14), so students can
+# test their error handling without hardware.
 ALARM_OUT_OF_WORKSPACE_CODE = 0x14
 
 
-# Default speed of the simulated arm (mm/sec) - controls how visibly the
-# panel's pose readout animates between waypoints.
-DEFAULT_SPEED_MM_PER_S = 200.0
-DEFAULT_JOG_SPEED_MM_PER_S = 80.0
-DEFAULT_JOG_SPEED_DEG_PER_S = 60.0
-DEFAULT_TICK_HZ = 30.0
+# ---------------------------------------------------------------------------
+# Workspace of the real arm
+#
+# Geometry and joint ranges of the Dobot Magician from its user guide (V2.3.1):
+# arm lengths from Figure 2.9, joint ranges and maximum reach from Table 2.2.
+# They are physical properties of the arm, so they are constants, not settings.
+# ---------------------------------------------------------------------------
+
+REAR_ARM_LENGTH_MM = 135.0
+FOREARM_LENGTH_MM = 147.0
+BASE_RANGE_DEG = (-90.0, 90.0)
+REAR_ARM_RANGE_DEG = (0.0, 85.0)  # from vertical, positive leaning forward
+FOREARM_RANGE_DEG = (-10.0, 90.0)  # from horizontal, positive pointing down
+MAXIMUM_REACH_MM = 320.0
+
+# Coordinates are those of the tool point, which the firmware places a
+# tool-specific distance in front of the wrist (EndEffectorParams). The guide
+# does not give that distance, so it is chosen to make the farthest reachable
+# point the official maximum reach.
+TOOL_OFFSET_MM = MAXIMUM_REACH_MM - (
+    REAR_ARM_LENGTH_MM * math.sin(math.radians(REAR_ARM_RANGE_DEG[1])) + FOREARM_LENGTH_MM
+)
+
+ANGLE_TOLERANCE_DEG = 1e-6
+
+
+def is_within(angle: float, angle_range: tuple[float, float]) -> bool:
+    low, high = angle_range
+    return low - ANGLE_TOLERANCE_DEG <= angle <= high + ANGLE_TOLERANCE_DEG
+
+
+def joint_angles(x: float, y: float, z: float) -> tuple[float, float, float] | None:
+    """Base, rear-arm, and forearm angles in degrees that put the tool at ``(x, y, z)``.
+
+    ``None`` if no angles within the joint ranges reach the point. The origin is
+    the center of the three motors, as on the real arm.
+    """
+    base = math.degrees(math.atan2(y, x))
+    if not is_within(base, BASE_RANGE_DEG):
+        return None
+    wrist_radius = math.hypot(x, y) - TOOL_OFFSET_MM
+    wrist_distance = math.hypot(wrist_radius, z)
+    if wrist_distance == 0:
+        return None
+    # Law of cosines: angle between the rear arm and the line to the wrist.
+    cosine = (REAR_ARM_LENGTH_MM**2 + wrist_distance**2 - FOREARM_LENGTH_MM**2) / (
+        2 * REAR_ARM_LENGTH_MM * wrist_distance
+    )
+    if not -1.0 <= cosine <= 1.0:
+        return None
+    wrist_direction = math.degrees(math.atan2(wrist_radius, z))  # from vertical
+    elbow_angle = math.degrees(math.acos(cosine))
+    for rear_arm in (wrist_direction - elbow_angle, wrist_direction + elbow_angle):
+        elbow_radius = REAR_ARM_LENGTH_MM * math.sin(math.radians(rear_arm))
+        elbow_height = REAR_ARM_LENGTH_MM * math.cos(math.radians(rear_arm))
+        forearm = math.degrees(math.atan2(elbow_height - z, wrist_radius - elbow_radius))
+        if is_within(rear_arm, REAR_ARM_RANGE_DEG) and is_within(forearm, FOREARM_RANGE_DEG):
+            return base, rear_arm, forearm
+    return None
+
+
+def is_reachable(x: float, y: float, z: float) -> bool:
+    """Whether the real arm can move its tool to ``(x, y, z)``."""
+    return joint_angles(x, y, z) is not None
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +147,18 @@ class MotionTarget:
     y: float = 0.0
     z: float = 50.0
     r: float = 0.0
-    queue_index: int = 0  # the queued cmd index this target finishes
+
+
+@dataclass
+class QueuedCommand:
+    """A command waiting in, or running at the head of, the simulated queue."""
+
+    queue_index: int
+    # Runs when the command reaches the head of the queue and returns the
+    # waypoints of the move it starts (none for commands that do not move).
+    start: Callable[[], list[MotionTarget]]
+    wait_seconds: float = 0.0
+    waypoints: list[MotionTarget] | None = None  # None until the command starts
 
 
 @dataclass
@@ -119,25 +181,26 @@ class FakeDobot:
         self,
         port: str = "/dev/sim0",
         *,
-        speed_mm_per_s: float = DEFAULT_SPEED_MM_PER_S,
-        tick_hz: float = DEFAULT_TICK_HZ,
+        speed_mm_per_s: float | None = None,
+        tick_hz: float | None = None,
         serial_number: str = "SIM-MAGICIAN",
     ) -> None:
+        settings = get_config()["simulator"]
+        speed_mm_per_s = settings["speed_mm_per_s"] if speed_mm_per_s is None else speed_mm_per_s
+        tick_hz = settings["tick_hz"] if tick_hz is None else tick_hz
         self.port = port
         self.serial_number = serial_number
         self._state = ArmState()
-        self._target: MotionTarget | None = None
-        # Multi-stage motions (e.g. HOME) traverse a list of waypoints; the
-        # current one lives in _target, the rest in _pending_targets.
-        self._pending_targets: list[MotionTarget] = []
+        self._queue: deque[QueuedCommand] = deque()
+        self._queue_running = True  # SET_QUEUED_CMD_START_EXEC / STOP_EXEC
         # While set, the sim_loop nudges the pose in this direction every
-        # tick. set_jog_cmd(IDLE) clears it.
+        # tick and the queue waits. set_jog_cmd(IDLE) clears it.
         self._jog: ActiveJog | None = None
         # Internal "100% velocity" baselines. Effective speed every tick is
         # baseline * (vel_ratio / 100), so the panel's speed slider directly
         # controls how fast jogs and PTPs run - same as a real arm.
-        self._jog_baseline_mm = DEFAULT_JOG_SPEED_MM_PER_S
-        self._jog_baseline_deg = DEFAULT_JOG_SPEED_DEG_PER_S
+        self._jog_baseline_mm = settings["jog_speed_mm_per_s"]
+        self._jog_baseline_deg = settings["jog_speed_deg_per_s"]
         self._ptp_baseline_mm = float(speed_mm_per_s)
         # Velocity ratios (0..100, percent). Default 50 matches the panel
         # slider's startup value.
@@ -169,14 +232,67 @@ class FakeDobot:
     def _run_motion_loop(self) -> None:
         while not self._stop.is_set():
             with self._lock:
-                # 1. Active JOG - nudge pose every tick. JOG cancels any
-                #    pending PTP target (manual override beats automation).
                 if self._jog is not None:
                     self._apply_jog_step(self._jog)
-                # 2. Multi-stage / single-target interpolation.
-                elif self._target is not None:
-                    self._step_toward_target()
+                else:
+                    self.run_queue_tick()
             self._stop.wait(self._tick_seconds)
+
+    # -- queue ---------------------------------------------------------------
+
+    def can_run_queue(self) -> bool:
+        """Whether the head of the queue may run now. Call with the lock held."""
+        return (
+            bool(self._queue)
+            and self._queue_running
+            and self._jog is None
+            and not any(self._alarms)
+        )
+
+    def advance_queue(self) -> None:
+        """Start queued commands in order and retire the finished ones.
+
+        Commands that do not move finish at once; a move or a wait stays at
+        the head until run_queue_tick completes it. Call with the lock held.
+        """
+        while self.can_run_queue():
+            command = self._queue[0]
+            if command.waypoints is None:
+                command.waypoints = command.start()
+            if command.waypoints or command.wait_seconds > 0:
+                return
+            self._queue_executed = command.queue_index
+            self._queue.popleft()
+
+    def run_queue_tick(self) -> None:
+        """Advance the command at the head of the queue by one tick."""
+        self.advance_queue()
+        if not self.can_run_queue():
+            return
+        command = self._queue[0]
+        if command.waypoints:
+            if self.step_toward(command.waypoints[0]):
+                command.waypoints.pop(0)
+        else:
+            command.wait_seconds -= self._tick_seconds
+        self.advance_queue()
+
+    def enqueue(self, start: Callable[[], list[MotionTarget]], wait_seconds: float = 0.0) -> int:
+        """Add a command to the queue and return its queue index."""
+        with self._lock:
+            self._queue_added += 1
+            self._queue.append(QueuedCommand(self._queue_added, start, wait_seconds))
+            self.advance_queue()
+            return self._queue_added
+
+    def enqueue_action(self, action: Callable[[], None]) -> int:
+        """Queue a command that takes effect when it reaches the head of the queue."""
+
+        def start() -> list[MotionTarget]:
+            action()
+            return []
+
+        return self.enqueue(start)
 
     # -- jog helpers ---------------------------------------------------------
 
@@ -233,27 +349,21 @@ class FakeDobot:
             current_value + sign * speeds[axis_index] * self._tick_seconds,
         )
 
-    def _step_toward_target(self) -> None:
-        """Advance current target by one tick; pop the next one when reached."""
-        state, target = self._state, self._target
-        if target is None:
-            return
+    def step_toward(self, target: MotionTarget) -> bool:
+        """Move one tick toward ``target``; return whether it was reached."""
+        state = self._state
         dx, dy, dz = target.x - state.x, target.y - state.y, target.z - state.z
         distance = max((dx * dx + dy * dy + dz * dz) ** 0.5, 1e-9)
         step = self._speed * self._tick_seconds
         if distance <= step:
             state.x, state.y, state.z, state.r = target.x, target.y, target.z, target.r
-            if self._pending_targets:
-                self._target = self._pending_targets.pop(0)
-            else:
-                self._queue_executed = max(self._queue_executed, target.queue_index)
-                self._target = None
-        else:
-            state.x += dx * (step / distance)
-            state.y += dy * (step / distance)
-            state.z += dz * (step / distance)
-            # R rotates fast - interpolate proportionally to XY/Z progress.
-            state.r += (target.r - state.r) * (step / distance)
+            return True
+        state.x += dx * (step / distance)
+        state.y += dy * (step / distance)
+        state.z += dz * (step / distance)
+        # R rotates fast - interpolate proportionally to XY/Z progress.
+        state.r += (target.r - state.r) * (step / distance)
+        return False
 
     def stop(self) -> None:
         self._stop.set()
@@ -262,64 +372,37 @@ class FakeDobot:
     # ---- helpers used by the frame handler --------------------------------
 
     def enqueue_home(self) -> int:
-        """Multi-stage homing - lift Z, rotate to home XY, descend.
+        """Queue multi-stage homing - lift Z, rotate to home XY, descend.
 
         Mimics the visible behaviour of a real Magician: it first lifts
         out of the work area, then swings the base around to align with
         the home position, then drops down to the home Z.
         """
-        with self._lock:
-            self._queue_added += 1
-            queue_index = self._queue_added
+
+        def start() -> list[MotionTarget]:
             state = self._state
             home_x, home_y, home_z, home_r = 200.0, 0.0, 50.0, 0.0
             lift_z = max(state.z, home_z) + 60.0  # safe altitude above both poses
-            stages = [
-                # 1. Lift Z while keeping current XY/R.
-                MotionTarget(x=state.x, y=state.y, z=lift_z, r=state.r, queue_index=queue_index),
-                # 2. Swing the base to align with home XY (still up high).
-                MotionTarget(x=home_x, y=home_y, z=lift_z, r=home_r, queue_index=queue_index),
-                # 3. Descend to the home Z.
-                MotionTarget(x=home_x, y=home_y, z=home_z, r=home_r, queue_index=queue_index),
+            return [
+                MotionTarget(x=state.x, y=state.y, z=lift_z, r=state.r),
+                MotionTarget(x=home_x, y=home_y, z=lift_z, r=home_r),
+                MotionTarget(x=home_x, y=home_y, z=home_z, r=home_r),
             ]
-            self._target = stages[0]
-            self._pending_targets = stages[1:]
-            return queue_index
+
+        return self.enqueue(start)
 
     def set_motion_target(self, x: float, y: float, z: float, r: float) -> int:
-        with self._lock:
-            self._queue_added += 1
-            queue_index = self._queue_added
-            if not self.is_in_workspace(x, y, z):
-                # The real firmware behaviour: queue index advances (so
-                # wait_for() returns), but the workspace alarm bit is set
-                # so the pydobotlab waiters detect the failure and raise
-                # DobotKinematicError on the script side.
-                self._alarms[ALARM_OUT_OF_WORKSPACE_CODE // 8] |= 1 << (
-                    ALARM_OUT_OF_WORKSPACE_CODE % 8
-                )
-                self._queue_executed = max(self._queue_executed, queue_index)
-                self._target = None
-                return queue_index
-            self._target = MotionTarget(x=x, y=y, z=z, r=r, queue_index=queue_index)
-            self._pending_targets.clear()
-            return queue_index
+        """Queue a point-to-point move to ``(x, y, z, r)``."""
 
-    @staticmethod
-    def is_in_workspace(x: float, y: float, z: float) -> bool:
-        radius = math.sqrt(x * x + y * y)
-        workspace = SIM_WORKSPACE
-        return (
-            workspace["min_radius_mm"] <= radius <= workspace["max_radius_mm"]
-            and workspace["z_min_mm"] <= z <= workspace["z_max_mm"]
-        )
+        def start() -> list[MotionTarget]:
+            if is_reachable(x, y, z):
+                return [MotionTarget(x=x, y=y, z=z, r=r)]
+            # The command finishes without moving and sets the workspace
+            # alarm, which stops the queue until the alarm is cleared.
+            self._alarms[ALARM_OUT_OF_WORKSPACE_CODE // 8] |= 1 << (ALARM_OUT_OF_WORKSPACE_CODE % 8)
+            return []
 
-    def complete_queued_command(self) -> int:
-        """For queued commands that don't move the arm - bump the counter."""
-        with self._lock:
-            self._queue_added += 1
-            self._queue_executed = self._queue_added  # instantly "done"
-            return self._queue_added
+        return self.enqueue(start)
 
     # ---- frame dispatch ----------------------------------------------------
 
@@ -354,6 +437,7 @@ class FakeDobot:
         if command_id == CommandID.CLEAR_ALL_ALARMS_STATE and is_write:
             with self._lock:
                 self._alarms = bytearray(16)
+                self.advance_queue()
             return pack(command_id, frame.ctrl, b"")
 
         # --- HOME ----------------------------------------------------------
@@ -376,13 +460,6 @@ class FakeDobot:
                     self._jog = None
                 else:
                     self._jog = ActiveJog(mode=int(mode), cmd=int(cmd))
-                    # Manual jog cancels any in-flight automated motion.
-                    self._target = None
-                    self._pending_targets.clear()
-                if is_queued:
-                    self._queue_added += 1
-                    self._queue_executed = self._queue_added
-                    return pack(command_id, frame.ctrl, struct.pack("<Q", self._queue_added))
             return pack(command_id, frame.ctrl, b"")
 
         # --- Movement-rate / jog-rate (controlled by the panel speed slider)
@@ -391,15 +468,13 @@ class FakeDobot:
         if command_id == CommandID.GET_SET_PTP_COMMON_PARAMS:
             if is_write and len(params) >= 8:
                 velocity, acceleration = struct.unpack("<2f", params[:8])
-                with self._lock:
+
+                def set_ptp_speed() -> None:
                     self._ptp_vel_ratio = max(0.0, min(100.0, float(velocity)))
                     self._ptp_acc_ratio = max(0.0, min(100.0, float(acceleration)))
                     self._speed = self._ptp_baseline_mm * self._ptp_vel_ratio / 100.0
-                if is_queued:
-                    self._queue_added += 1
-                    self._queue_executed = self._queue_added
-                    return pack(command_id, frame.ctrl, struct.pack("<Q", self._queue_added))
-                return pack(command_id, frame.ctrl, b"")
+
+                return self.apply_write(command_id, frame.ctrl, is_queued, set_ptp_speed)
             else:
                 with self._lock:
                     return pack(
@@ -414,14 +489,12 @@ class FakeDobot:
                 # Wire order: (jumpHeight, zLimit) - the device.py property
                 # already swaps for us before sending.
                 height, zlimit = struct.unpack("<2f", params[:8])
-                with self._lock:
+
+                def set_jump_params() -> None:
                     self._jump_height = float(height)
                     self._jump_zlimit = float(zlimit)
-                if is_queued:
-                    self._queue_added += 1
-                    self._queue_executed = self._queue_added
-                    return pack(command_id, frame.ctrl, struct.pack("<Q", self._queue_added))
-                return pack(command_id, frame.ctrl, b"")
+
+                return self.apply_write(command_id, frame.ctrl, is_queued, set_jump_params)
             else:
                 with self._lock:
                     return pack(
@@ -433,16 +506,14 @@ class FakeDobot:
         if command_id == CommandID.GET_SET_JOG_COMMON_PARAMS:
             if is_write and len(params) >= 8:
                 velocity, acceleration = struct.unpack("<2f", params[:8])
-                with self._lock:
+
+                def set_jog_speed() -> None:
                     self._jog_vel_ratio = max(0.0, min(100.0, float(velocity)))
                     self._jog_acc_ratio = max(0.0, min(100.0, float(acceleration)))
                     self._jog_speed_mm = self._jog_baseline_mm * self._jog_vel_ratio / 100.0
                     self._jog_speed_deg = self._jog_baseline_deg * self._jog_vel_ratio / 100.0
-                if is_queued:
-                    self._queue_added += 1
-                    self._queue_executed = self._queue_added
-                    return pack(command_id, frame.ctrl, struct.pack("<Q", self._queue_added))
-                return pack(command_id, frame.ctrl, b"")
+
+                return self.apply_write(command_id, frame.ctrl, is_queued, set_jog_speed)
             else:
                 with self._lock:
                     return pack(
@@ -453,7 +524,9 @@ class FakeDobot:
 
         # --- Wait ----------------------------------------------------------
         if command_id == CommandID.SET_WAIT_CMD and is_queued:
-            return pack(command_id, frame.ctrl, struct.pack("<Q", self.complete_queued_command()))
+            (milliseconds,) = struct.unpack("<I", params[:4].ljust(4, b"\x00"))
+            queue_index = self.enqueue(lambda: [], wait_seconds=milliseconds / 1000.0)
+            return pack(command_id, frame.ctrl, struct.pack("<Q", queue_index))
 
         # --- Queue control --------------------------------------------------
         if command_id == CommandID.GET_QUEUED_CMD_CURRENT_INDEX:
@@ -468,11 +541,20 @@ class FakeDobot:
             CommandID.SET_QUEUED_CMD_FORCE_STOP_EXEC,
             CommandID.SET_QUEUED_CMD_CLEAR,
         ):
-            if command_id == CommandID.SET_QUEUED_CMD_CLEAR:
-                with self._lock:
+            with self._lock:
+                if command_id == CommandID.SET_QUEUED_CMD_START_EXEC:
+                    self._queue_running = True
+                    self.advance_queue()
+                elif command_id == CommandID.SET_QUEUED_CMD_STOP_EXEC:
+                    self._queue_running = False
+                elif command_id == CommandID.SET_QUEUED_CMD_FORCE_STOP_EXEC:
+                    self._queue_running = False
+                    if self._queue and self._queue[0].waypoints is not None:
+                        self._queue.popleft()  # abandon the command in progress
+                else:
+                    self._queue.clear()
                     self._queue_added = 0
                     self._queue_executed = 0
-                    self._target = None
             return pack(command_id, frame.ctrl, b"")
 
         # --- Device info ---------------------------------------------------
@@ -491,14 +573,26 @@ class FakeDobot:
             return pack(command_id, frame.ctrl, bytes((r, g, b)))
 
         # --- Default fallback -----------------------------------------------
-        # For any queued write we don't model explicitly: bump the counter
-        # and acknowledge. For Get* reads: respond with zeros of a plausible
-        # length. For everything else: empty ack.
+        # A queued write we don't model takes its place in the queue and
+        # finishes when it reaches the head. For Get* reads: respond with
+        # zeros of a plausible length. For everything else: empty ack.
         if is_queued and is_write:
-            return pack(command_id, frame.ctrl, struct.pack("<Q", self.complete_queued_command()))
+            queue_index = self.enqueue_action(lambda: None)
+            return pack(command_id, frame.ctrl, struct.pack("<Q", queue_index))
         if not is_write:
             return pack(command_id, frame.ctrl, b"\x00" * 8)
         return pack(command_id, frame.ctrl, b"")
+
+    def apply_write(
+        self, command_id: int, control: int, is_queued: bool, action: Callable[[], None]
+    ) -> bytes:
+        """Apply a setting now, or queue it, and return the reply frame."""
+        if is_queued:
+            queue_index = self.enqueue_action(action)
+            return pack(command_id, control, struct.pack("<Q", queue_index))
+        with self._lock:
+            action()
+        return pack(command_id, control, b"")
 
 
 # ---------------------------------------------------------------------------
@@ -592,8 +686,10 @@ _INSTALLED: bool = False
 _INSTALL_LOCK = threading.Lock()
 
 
-def install_simulator(arms: int = 2) -> list[str]:
+def install_simulator(arms: int | None = None) -> list[str]:
     """Install the simulator backend; return the list of fake port names.
+
+    ``arms`` defaults to the configured value.
 
     After this returns, any code path that opens ``serial.Serial(port=...)``
     or enumerates ``serial.tools.list_ports.comports()`` will see the fake
@@ -603,6 +699,8 @@ def install_simulator(arms: int = 2) -> list[str]:
     Idempotent within a process; calling twice is a no-op.
     """
     global _INSTALLED
+    if arms is None:
+        arms = get_config()["simulator"]["arms"]
     with _INSTALL_LOCK:
         ports = [f"/dev/sim{i}" for i in range(max(1, int(arms)))]
         # Pre-create the fake arms so they exist even before first connect.

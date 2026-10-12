@@ -58,11 +58,11 @@ def per_arm(
             print(f"[{label}] lap {lap + 1}/{laps}")
             with arm.batch():
                 # Queue the whole lap; firmware runs it as one continuous
-                # program. The panel keeps polling get_pose() at 30 Hz,
-                # going through the same broker lock - readouts stay live.
+                # program when the block ends, and the block waits for it.
+                # The panel keeps polling get_pose() at 30 Hz, going
+                # through the same broker lock - readouts stay live.
                 for x, y, z, r in tour:
                     arm.ptp(PTPMode.MOVL_XYZ, x, y, z, r)
-            arm.wait_idle(timeout=60)
 
         # Park up at the start of the tour.
         x0, y0, z0, r0 = tour[0]

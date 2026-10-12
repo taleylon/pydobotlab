@@ -1,229 +1,233 @@
-# Pose & motion
+# Motion
 
-Methods that read the current pose and queue trajectory motions (PTP - point-to-point - and HOME).
+Read the arm pose and run point-to-point, continuous-path, and homing moves.
 
----
+| Member | Description |
+|---|---|
+| [`Magician.get_pose`](#get_pose) | Read the current pose. |
+| [`Magician.ptp`](#ptp) | Move to a target and wait until the move ends. |
+| [`Magician.move_to`](#move_to) | Move to a Cartesian target and wait for completion. |
+| [`Magician.set_r`](#set_r) | Rotate the end effector without moving X, Y, or Z. |
+| [`Magician.set_home`](#set_home) | Move the arm to its home position. |
+| [`Magician.cp`](#cp) | Queue a continuous-path segment. |
+| [`Pose`](#pose) | Arm pose returned by `get_pose`. |
+| [`PTPMode`](#ptpmode) | Point-to-point trajectory modes. |
 
-## `Pose`
-
-`Pose` is the dataclass returned by [`get_pose()`](#get_pose). Frozen, slotted, iterable.
-
-| Field | Type | Meaning |
-|-------|------|---------|
-| `x, y, z` | `float` | Cartesian position of the end-effector (mm). |
-| `r` | `float` | End-effector rotation around the wrist (degrees). |
-| `j1, j2, j3, j4` | `float` | Individual joint angles (degrees). |
-| `joints` *(property)* | `list[float]` | `[j1, j2, j3, j4]`. |
-
-Print a readable summary of the coordinates and joint angles:
-
-```python
-pose = bot.get_pose()
-print(pose)
-```
-
-For example (illustrative values):
-
-```text
-Pose(x=220.00, y=0.00, z=50.00, r=0.00, joints=[0.00, 30.00, 45.00, 0.00])
-```
-
-Positions are in millimetres; `r` and the joint angles are in degrees.
-
-Use `as_xyzr()` to unpack only the Cartesian coordinates, including rotation:
-
-```python
-x, y, z, r = pose.as_xyzr()
-```
-
-Iteration matches DobotLab's five-item return shape, with the joints as one list:
-
-```python
-x, y, z, r, joints = pose
-```
-
-Use `pose.as_joints()` for just the four joint angles as a tuple.
+Slideway moves are on the [Accessories](accessories.md#slideway) page.
 
 ---
 
-## `get_pose() -> Pose` {#get_pose}
-
-**Purpose.** Read the current Cartesian + joint pose.
-
-**Inputs.** None.
-
-**Returns.** [`Pose`](#pose).
-
-**Protocol.** [`GET_POSE`](../protocol/command-ids.md) (10), read-side, immediate. Response payload: 8 little-endian `float32` (`x, y, z, r, j1, j2, j3, j4`).
-
----
-
-## `move_to(x, y, z, r=0.0, *, mode=PTPMode.MOVJ_XYZ, wait=True, timeout=30.0, raise_on_alarm=True) -> int` {#move-to}
-
-**Purpose.** Queue a PTP move to a Cartesian target and (by default) block until it completes.
-
-**Inputs.**
-
-| Arg | Type | Default | Meaning |
-|-----|------|---------|---------|
-| `x, y, z` | `float` | – | Cartesian target (mm). |
-| `r` | `float` | `0.0` | End-effector rotation (degrees). |
-| `mode` | [`PTPMode`](#ptp-modes) | `MOVJ_XYZ` | How to interpolate the trajectory. |
-| `wait` | `bool` | `True` | If `True`, block until the move runs. If `False`, return immediately. |
-| `timeout` | `float \| None` | `30.0` | Seconds to wait before giving up (only relevant when `wait=True`). `None` = wait forever. |
-| `raise_on_alarm` | `bool` | `True` | While waiting, raise [`DobotKinematicError`](errors.md#dobotkinematicerror-extends-dobotalarmerror) the moment a motion alarm fires (faster than waiting for the timeout). |
-
-**Returns.** `int` - the queued-command index assigned by the firmware.
-
-**Raises.**
-* [`DobotKinematicError`](errors.md#dobotkinematicerror-extends-dobotalarmerror) - target outside the workspace, IK has no solution, or a joint limit is hit during the motion.
-* [`DobotTimeoutError`](errors.md#dobottimeouterror) - `timeout` elapsed before the queue executed the command.
-
-**Protocol.** [`SET_PTP_CMD`](../protocol/command-ids.md) (84), write + queued. Param layout: `u8 mode | float32 x | float32 y | float32 z | float32 r` (17 bytes). Response: `u64 queueIndex`.
-
-**Example.**
+## `Magician.get_pose` {#get_pose}
 
 ```python
-bot.move_to(200, 0, 50, 0)  # Cartesian, joint-interp.
-bot.move_to(200, 0, 50, 0, mode=PTPMode.MOVL_XYZ)  # straight-line in Cartesian.
-bot.move_to(200, 0, 50, 0, wait=False)  # fire-and-forget.
+Magician.get_pose() -> Pose
+```
+
+Read the current Cartesian position and joint angles.
+
+**Returns** [`Pose`](#pose).
+
+**Example**
+
+```python
+x, y, z, r, joints = bot.get_pose()
 ```
 
 ---
 
-## `ptp(mode, x, y, z, r) -> int`
-
-**Purpose.** Lower-level form of `move_to()` - queue a PTP move without the convenience wrapping (no waiting, no alarm-watching). Use this when you want to enqueue a sequence of moves and only wait at the end (often inside [`with bot.batch():`](queue.md#batch-context-manager)).
-
-**Inputs.** `mode` (int or `PTPMode`), then `x, y, z, r` floats.
-
-**Returns.** `int` queued-command index.
-
-**Protocol.** Same as [`move_to`](#move-to) - [`SET_PTP_CMD`](../protocol/command-ids.md) (84).
-
----
-
-## `set_home(*, wait=True, timeout=60.0, raise_on_alarm=True) -> int`
-
-**Purpose.** Move the arm to its home position. The firmware does this in three internal stages (lift Z → swing base to home XY → descend), and re-zeroes any internal angle offsets along the way - which is why **`set_home()` also clears most alarms as a side-effect**.
-
-**Inputs.**
-
-| Arg | Type | Default | Meaning |
-|-----|------|---------|---------|
-| `wait` | `bool` | `True` | Block until home completes. |
-| `timeout` | `float \| None` | `60.0` | Seconds to wait. Home is slow - keep this generous. |
-| `raise_on_alarm` | `bool` | `True` | Raise on motion alarms while waiting. |
-
-**Returns.** `int` queued-command index.
-
-**Raises.**
-* [`DobotKinematicError`](errors.md#dobotkinematicerror-extends-dobotalarmerror) - only fires if home itself is unreachable from the current pose (very unusual).
-* [`DobotTimeoutError`](errors.md#dobottimeouterror) - home didn't finish in time.
-
-**Protocol.** [`SET_HOME_CMD`](../protocol/command-ids.md) (31), write + queued. Param: `u32` (target XY mode, set to 0 in pydobotlab - fixed home). Response: `u64 queueIndex`.
-
-**Note.** `home(...)` is kept as a deprecated alias.
-
----
-
-## `set_r(r) -> int`
-
-**Purpose.** Rotate the R axis (wrist) to `r` degrees without moving X/Y/Z.
-
-**Inputs.** `r: float` - target wrist angle in degrees.
-
-**Returns.** `int` queued-command index.
-
-**Protocol.** [`SET_PTP_CMD`](../protocol/command-ids.md) (84) with `mode=MOVJ_XYZ` and current X/Y/Z. (We read the current pose first, then send a single-axis move.)
-
----
-
-## `cp(x, y, z, *, velocity=100.0, mode=1) -> int`
-
-**Purpose.** Queue one Continuous Path segment.
-
-Unlike a chain of PTP `MOVL_XYZ` moves, the firmware does **not** decelerate to zero between consecutive `cp()` calls - it blends them into a single smooth trajectory. This is the right tool for drawing, engraving, and any path where the small visible pauses of PTP-MOVL at every waypoint are undesirable.
-
-**Inputs.**
-
-| Arg | Type | Default | Meaning |
-|-----|------|---------|---------|
-| `x, y, z` | `float` | – | Cartesian target (mm). |
-| `velocity` | `float` | `100.0` | Path velocity (mm/s). |
-| `mode` | `int` | `1` | `1` = absolute, `0` = relative. |
-
-**Returns.** `int` queued-command index.
-
-**Protocol.** [`SET_CP_CMD`](../protocol/command-ids.md) (91), write + queued. Param: `u8 cpMode | f32 x | f32 y | f32 z | f32 velocity` (17 bytes).
-
-**Notes.** Call [`set_cp_params`](speed.md#set_cp_paramsplan_acc-junction_vel-acc00-real_time_trackfalse-int) once at the start of your program to tune corner smoothness. Without it, the firmware uses a conservative default and corners look rounded.
-
-**Example - drawing a circle with no per-segment pause:**
+## `Magician.ptp` {#ptp}
 
 ```python
-import math
+Magician.ptp(mode, x, y, z, r) -> bool
+```
 
-bot.set_cp_params(plan_acc=200.0, junction_vel=200.0, acc=200.0)
-with bot.batch():
-    bot.ptp(PTPMode.MOVL_XYZ, 200, 0, -45, 0)  # pen down at start
-    for i in range(64):
-        a = 2 * math.pi * i / 64
-        bot.cp(200 + 30 * math.cos(a), 30 * math.sin(a), -45, velocity=80)
+Move to a target in point-to-point mode and wait until the move ends.
+
+Inside [`batch`](queue.md#batch), the move is queued and the method returns at once.
+
+**Parameters**
+
+| Name | Type | Description |
+|---|---|---|
+| `mode` | [`PTPMode`](#ptpmode) or `int` | Trajectory mode, `0` to `9`. |
+| `x`, `y`, `z`, `r` | `float` | Target. Cartesian position (mm) and rotation (degrees), joint angles (degrees), or increments, depending on `mode`. |
+
+**Returns** `bool`: `True`.
+
+**Raises**
+
+- [`DobotKinematicError`](errors.md#dobotkinematicerror): the target is outside the [workspace](../guide/workspace.md), or a joint limit is hit.
+- Another [`DobotAlarmError`](errors.md#dobotalarmerror) subclass: the arm reported another alarm.
+
+**See also** [`move_to`](#move_to), [`batch`](queue.md#batch).
+
+**Example**
+
+```python
+bot.ptp(mode=1, x=200, y=0, z=50, r=0)  # MOVJ_XYZ
+bot.ptp(mode=2, x=200, y=50, z=50, r=0)  # MOVL_XYZ
+```
+
+---
+
+## `Magician.move_to` {#move_to}
+
+```python
+Magician.move_to(x, y, z, r=0.0, *, mode=PTPMode.MOVJ_XYZ, wait=True, timeout=30.0, raise_on_alarm=True) -> int
+```
+
+Move to a Cartesian target in point-to-point mode.
+
+Unlike [`ptp`](#ptp), it has a timeout, and with `wait=False` it returns the queue index at once for [`wait_for`](queue.md#wait_for).
+
+**Parameters**
+
+| Name | Type | Description |
+|---|---|---|
+| `x`, `y`, `z` | `float` | Target position, mm. |
+| `r` | `float`, default `0.0` | End-effector rotation, degrees. |
+| `mode` | [`PTPMode`](#ptpmode) or `int`, default `PTPMode.MOVJ_XYZ` | Trajectory mode. |
+| `wait` | `bool`, default `True` | Block until the move executes. `False` returns after queuing. |
+| `timeout` | `float` or `None`, default `30.0` | Maximum wait, seconds. `None` waits indefinitely. Applies when `wait=True`. |
+| `raise_on_alarm` | `bool`, default `True` | Raise as soon as an alarm is active while waiting. |
+
+**Returns** `int`: queue index of the move.
+
+**Raises**
+
+- [`DobotKinematicError`](errors.md#dobotkinematicerror): the target is out of reach, or a joint limit is hit.
+- Another [`DobotAlarmError`](errors.md#dobotalarmerror) subclass: the arm reported another alarm.
+- [`DobotTimeoutError`](errors.md#dobottimeouterror): `timeout` elapsed.
+
+**See also** [`ptp`](#ptp), [`wait_for`](queue.md#wait_for), [`clear_alarm`](alarms.md#clear_alarm).
+
+**Example**
+
+```python
+bot.move_to(200, 0, 50, mode=1)  # MOVJ_XYZ
+bot.move_to(200, 50, 50, mode=2)  # MOVL_XYZ
+```
+
+---
+
+## `Magician.set_r` {#set_r}
+
+```python
+Magician.set_r(r) -> bool
+```
+
+Rotate the end effector without moving X, Y, or Z, and wait until the rotation ends.
+
+Reads the current pose, then moves to the same position with rotation `r` in `MOVJ_XYZ` mode.
+
+**Parameters**
+
+| Name | Type | Description |
+|---|---|---|
+| `r` | `float` | Target rotation, degrees. |
+
+**Returns** `bool`: `True`.
+
+**Raises** [`DobotAlarmError`](errors.md#dobotalarmerror) subclass: the arm reported an alarm.
+
+---
+
+## `Magician.set_home` {#set_home}
+
+```python
+Magician.set_home() -> bool
+```
+
+Move the arm to its home position and wait until it arrives.
+
+**Returns** `bool`: `True`.
+
+**Raises** [`DobotAlarmError`](errors.md#dobotalarmerror) subclass: the arm reported an alarm.
+
+---
+
+## `Magician.cp` {#cp}
+
+```python
+Magician.cp(x, y, z, *, velocity=100.0, mode=1) -> int
+```
+
+Queue a continuous-path segment.
+
+Consecutive segments are blended into one trajectory without stopping between them.
+
+**Parameters**
+
+| Name | Type | Description |
+|---|---|---|
+| `x`, `y`, `z` | `float` | Target position, mm. |
+| `velocity` | `float`, default `100.0` | Path velocity, mm/s. |
+| `mode` | `int`, default `1` | `1` for an absolute target, `0` for a target relative to the current position. |
+
+**Returns** `int`: queue index of the segment.
+
+**See also** [`set_cp_params`](speed.md#set_cp_params), [`batch`](queue.md#batch), [Motion patterns](../guide/motion.md#continuous-path).
+
+**Example**
+
+```python
+for x, y in [(200, 0), (220, 20), (240, 0)]:
+    bot.cp(x, y, -40, velocity=80)
 bot.wait_idle()
 ```
 
-See `examples/draw_smiley.py` for a complete eager-vs-lazy-vs-continuous comparison.
+---
+
+## `Pose` {#pose}
+
+```python
+class pydobotlab.Pose(x, y, z, r, j1, j2, j3, j4)
+```
+
+Arm pose returned by [`get_pose`](#get_pose). Immutable.
+
+| Attribute | Type | Description |
+|---|---|---|
+| `x`, `y`, `z` | `float` | Cartesian position, mm. |
+| `r` | `float` | End-effector rotation, degrees. |
+| `j1`, `j2`, `j3`, `j4` | `float` | Joint angles, degrees. |
+| `joints` | `list[float]` | `[j1, j2, j3, j4]`. |
+
+| Method | Description |
+|---|---|
+| `as_xyzr()` | Return `(x, y, z, r)`. |
+| `as_joints()` | Return `(j1, j2, j3, j4)`. |
+
+Iterating a `Pose` yields `x`, `y`, `z`, `r`, and `joints`. `str(pose)` shows each value rounded to two decimals.
+
+**Example**
+
+```python
+pose = bot.get_pose()
+x, y, z, r = pose.as_xyzr()
+```
 
 ---
 
-## `set_ptpwithl_cmd(mode, x, y, z, r, l) -> int`
+## `PTPMode` {#ptpmode}
 
-**Purpose.** PTP move that *also* drives the slideway (the optional linear rail) to position `l` (mm).
+```python
+class pydobotlab.PTPMode(IntEnum)
+```
 
-**Inputs.**
+Point-to-point trajectory modes for [`ptp`](#ptp), [`move_to`](#move_to), and [`set_ptpwithl_cmd`](accessories.md#set_ptpwithl_cmd). Each method accepts a member or its value: `mode=PTPMode.MOVL_XYZ` and `mode=2` are equivalent.
 
-| Arg | Type | Meaning |
-|-----|------|---------|
-| `mode` | `int / PTPMode` | Same modes as `ptp()`. |
-| `x, y, z, r` | `float` | Arm target. |
-| `l` | `float` | Slideway target (mm). |
+| Member | Value | Target | Trajectory |
+|---|---|---|---|
+| `JUMP_XYZ` | 0 | Cartesian | Lift, travel, descend. |
+| `MOVJ_XYZ` | 1 | Cartesian | Joint-interpolated. |
+| `MOVL_XYZ` | 2 | Cartesian | Straight line. |
+| `JUMP_ANGLE` | 3 | Joint angles | Lift, travel, descend. |
+| `MOVJ_ANGLE` | 4 | Joint angles | Joint-interpolated. |
+| `MOVL_ANGLE` | 5 | Joint angles | Linear in joint space. |
+| `MOVJ_INC` | 6 | Joint increments | Joint-interpolated. |
+| `MOVL_INC` | 7 | Cartesian increments | Straight line. |
+| `MOVJ_XYZ_INC` | 8 | Cartesian increments | Joint-interpolated. |
+| `JUMP_MOVL_XYZ` | 9 | Cartesian | Lift, straight-line travel, descend. |
 
-**Returns.** `int` queued-command index.
-
-**Protocol.** [`SET_PTP_WITH_L_CMD`](../protocol/command-ids.md) (86), write + queued. Param: `u8 mode | float32 x | float32 y | float32 z | float32 r | float32 l` (21 bytes).
-
-**Note.** Requires the slideway to be enabled with [`set_device_withl(True, version=...)`](extras.md#set-device-withl).
-
----
-
-## `get_posel() -> float`
-
-**Purpose.** Slideway position in millimetres.
-
-**Returns.** `float`.
-
-**Protocol.** [`GET_POSE_L`](../protocol/command-ids.md) (13), read, immediate.
-
-`get_pose_l()` and `get_slideway_pose()` are kept as deprecated aliases.
-
----
-
-## PTP modes
-
-The `PTPMode` enum (`from pydobotlab import PTPMode`) selects how the firmware interpolates the trajectory:
-
-| Member         | Value | Target frame | Trajectory |
-|----------------|-------|--------------|------------|
-| `JUMP_XYZ`     | 0     | Cartesian    | Lift up to JUMP height, fly across, drop down - pick-and-place style. |
-| `MOVJ_XYZ`     | 1     | Cartesian    | Joint-interpolated (smooth in joint space, curved in Cartesian). |
-| `MOVL_XYZ`     | 2     | Cartesian    | Linear in Cartesian (straight line). |
-| `JUMP_ANGLE`   | 3     | Joint        | Same as `JUMP_XYZ` but target is `j1..j4`. |
-| `MOVJ_ANGLE`   | 4     | Joint        | Joint-interpolated to joint targets. |
-| `MOVL_ANGLE`   | 5     | Joint        | Linear-in-joint-space to joint targets. |
-| `MOVJ_INC`     | 6     | Joint Δ      | Relative joint move (`Δj1..Δj4`). |
-| `MOVL_INC`     | 7     | Cartesian Δ  | Relative linear Cartesian move. |
-| `MOVJ_XYZ_INC` | 8     | Cartesian Δ  | Relative Cartesian joint-interp move. |
-| `JUMP_MOVL_XYZ` | 9 | Cartesian | JUMP with linear travel between lift and descent. |
-
-JUMP heights and the in-flight Z limit are configured via [`bot.jump_params`](speed.md#jump_params-property-tuplefloat-float).
+JUMP lift height and Z limit are set with [`jump_params`](speed.md#jump_params).

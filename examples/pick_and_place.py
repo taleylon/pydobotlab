@@ -48,9 +48,6 @@ def main() -> None:
             print(f"cycle {i + 1}: B -> A")
             pick_one(bot, DROP, PICKUP)
 
-        # The pick-and-place above queued many commands; block until the
-        # firmware queue catches up before disconnecting.
-        bot.wait_idle(timeout=120)
         bot.move_to(PICKUP[0], PICKUP[1], SAFE_Z, 0.0)
         print("done")
 

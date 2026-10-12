@@ -1,128 +1,180 @@
-# Queue control
+# Command queue
 
-The Magician's firmware has an internal **command queue**. Most "set" commands are tagged `isQueued=1` so they're appended to that queue and executed in FIFO order, while reads and a few control commands run **immediately** outside the queue.
+Commands that change the arm state are appended to the firmware command queue and run in order. The DobotLab functions, such as [`ptp`](motion.md#ptp), wait for their own command. These members wait on, pause, and clear the queue.
 
-pydobotlab exposes the queue both implicitly (every queued method returns its assigned index, and `move_to`/`set_home` block on it for you) and explicitly (the methods on this page).
-
----
-
-## `wait_for(index, *, timeout=None, poll=0.02, raise_on_alarm=True) -> None`
-
-**Purpose.** Block until the firmware queue has executed up through `index`.
-
-**Inputs.**
-
-| Arg | Type | Default | Meaning |
-|-----|------|---------|---------|
-| `index` | `int` | – | Queue index (returned by an earlier queued call). |
-| `timeout` | `float \| None` | `None` | Seconds to wait. `None` = wait forever. |
-| `poll` | `float` | `0.02` | How often to check (seconds). |
-| `raise_on_alarm` | `bool` | `True` | While polling, also call [`get_alarms()`](alarms.md). If any motion alarm bit fires (codes `0x10..0x77`), raise [`DobotKinematicError`](errors.md#dobotkinematicerror-extends-dobotalarmerror) immediately so we don't sit forever for a command the firmware refused. |
-
-**Returns.** `None` once the queue has reached `index`.
-
-**Raises.**
-* [`DobotTimeoutError`](errors.md#dobottimeouterror) - `timeout` elapsed before the index was reached.
-* [`DobotKinematicError`](errors.md#dobotkinematicerror-extends-dobotalarmerror) - motion alarm fired while waiting.
-
-**Protocol.** Polls [`GET_QUEUED_CMD_CURRENT_INDEX`](../protocol/command-ids.md) (246) and (when `raise_on_alarm`) [`GET_ALARMS_STATE`](../protocol/command-ids.md) (20) on every tick.
+| Member | Description |
+|---|---|
+| [`Magician.wait_for`](#wait_for) | Block until a queued command has executed. |
+| [`Magician.wait_idle`](#wait_idle) | Block until every command queued by this instance has executed. |
+| [`Magician.wait`](#wait) | Pause the arm. |
+| [`Magician.batch`](#batch) | Queue commands and run them when the block exits. |
+| [`Magician.start_queue`](#start_queue) | Start executing queued commands. |
+| [`Magician.stop_queue`](#stop_queue) | Pause execution of queued commands. |
+| [`Magician.force_stop_queue`](#force_stop_queue) | Stop execution immediately. |
+| [`Magician.clear_queue`](#clear_queue) | Remove all queued commands. |
+| [`Magician.queued_cmd_current_index`](#queued_cmd_current_index) | Read the index of the last executed command. |
+| [`Magician.queued_cmd_left_space`](#queued_cmd_left_space) | Read the free space in the queue. |
 
 ---
 
-## `wait_idle(*, timeout=None, poll=0.02, raise_on_alarm=True) -> None`
+## `Magician.wait_for` {#wait_for}
 
-**Purpose.** Block until the queue has executed every command issued from this `Magician` instance - i.e. until it has reached the last queue index pydobotlab returned.
+```python
+Magician.wait_for(index, *, timeout=None, poll=0.02, raise_on_alarm=True) -> None
+```
 
-**Inputs.** Same as `wait_for`, minus `index`.
+Block until the queue has executed the command at `index`.
 
-**Returns.** `None`.
+**Parameters**
 
-**Protocol.** Same as `wait_for`.
+| Name | Type | Description |
+|---|---|---|
+| `index` | `int` | Queue index returned by a queued command. |
+| `timeout` | `float` or `None`, default `None` | Maximum wait, seconds. `None` waits indefinitely. |
+| `poll` | `float`, default `0.02` | Polling interval, seconds. |
+| `raise_on_alarm` | `bool`, default `True` | Raise as soon as any alarm is active. Commands still queued are then discarded. |
 
----
+**Raises**
 
-## `start_queue() -> None`
+- [`DobotAlarmError`](errors.md#dobotalarmerror) subclass: an alarm is active while waiting.
+- [`DobotTimeoutError`](errors.md#dobottimeouterror): `timeout` elapsed.
 
-**Purpose.** Resume execution of queued commands. (`connect()` calls this automatically when `auto_start_queue=True`.)
+**Example**
 
-**Protocol.** [`SET_QUEUED_CMD_START_EXEC`](../protocol/command-ids.md) (240), write + immediate.
-
----
-
-## `stop_queue() -> None`
-
-**Purpose.** Pause execution of queued commands without throwing them away. New commands continue to be appended; nothing runs until you call `start_queue()` again.
-
-**Protocol.** [`SET_QUEUED_CMD_STOP_EXEC`](../protocol/command-ids.md) (241), write + immediate.
-
----
-
-## `force_stop_queue() -> None`
-
-**Purpose.** Halt the in-flight motion *now*. Any current move stops mid-trajectory.
-
-**Protocol.** [`SET_QUEUED_CMD_FORCE_STOP_EXEC`](../protocol/command-ids.md) (242), write + immediate.
+```python
+index = bot.move_to(200, 0, 50, mode=1, wait=False)  # MOVJ_XYZ
+bot.wait_for(index, timeout=10)
+```
 
 ---
 
-## `clear_queue() -> None`
+## `Magician.wait_idle` {#wait_idle}
 
-**Purpose.** Discard all queued commands and reset the firmware's queue counter to zero. pydobotlab also resets its internal `_last_queued_index` so subsequent `wait_idle` calls don't try to wait on a stale index.
+```python
+Magician.wait_idle(*, timeout=None, poll=0.02, raise_on_alarm=True) -> None
+```
 
-**Protocol.** [`SET_QUEUED_CMD_CLEAR`](../protocol/command-ids.md) (245), write + immediate.
+Block until the queue has executed every command queued by this instance.
 
----
+Returns immediately if nothing has been queued since connecting or since the last [`clear_queue`](#clear_queue).
 
-## `queued_cmd_current_index() -> int`
+**Parameters**
 
-**Purpose.** Read the firmware's current queue execution pointer.
+| Name | Type | Description |
+|---|---|---|
+| `timeout` | `float` or `None`, default `None` | Maximum wait, seconds. `None` waits indefinitely. |
+| `poll` | `float`, default `0.02` | Polling interval, seconds. |
+| `raise_on_alarm` | `bool`, default `True` | Raise as soon as any alarm is active. Commands still queued are then discarded. |
 
-**Returns.** `int` - last-executed queue index.
+**Raises**
 
-**Protocol.** [`GET_QUEUED_CMD_CURRENT_INDEX`](../protocol/command-ids.md) (246), read + immediate. Response: `u64`.
-
----
-
-## `queued_cmd_left_space() -> int`
-
-**Purpose.** Read how many slots are still free in the firmware's queue buffer (handy if you're enqueueing a long program and need to throttle).
-
-**Returns.** `int`.
-
-**Protocol.** [`GET_QUEUED_CMD_LEFT_SPACE`](../protocol/command-ids.md) (247), read + immediate.
+- [`DobotAlarmError`](errors.md#dobotalarmerror) subclass: an alarm is active while waiting.
+- [`DobotTimeoutError`](errors.md#dobottimeouterror): `timeout` elapsed.
 
 ---
 
-## `wait(second) -> int`
+## `Magician.wait` {#wait}
 
-**Purpose.** Insert a pause of `second` seconds *into the firmware queue*. Use this to delay between queued moves without round-tripping back to Python.
+```python
+Magician.wait(second) -> bool
+```
 
-**Inputs.** `second: float`.
+Pause the arm for `second` seconds and wait until the pause ends.
 
-**Returns.** `int` queued-command index.
+Inside [`batch`](#batch), the pause is queued and the method returns at once.
 
-**Protocol.** [`SET_WAIT_CMD`](../protocol/command-ids.md) (110), write + queued. Param: `u32 ms`.
+**Parameters**
 
-`wait_seconds()` is kept as a deprecated alias.
+| Name | Type | Description |
+|---|---|---|
+| `second` | `float` | Pause duration, seconds. Rounded to milliseconds. |
+
+**Returns** `bool`: `True`.
 
 ---
 
-## `batch()` - context manager
+## `Magician.batch` {#batch}
 
-**Purpose.** A "lazy run" idiom DobotLab itself doesn't expose: pause the firmware queue, accumulate moves inside the block, resume execution on exit. Lets you queue a whole drawing first, then have the firmware run it as one continuous program at full motion-planning speed.
+```python
+Magician.batch()
+```
 
-**Inputs.** None.
+Context manager that queues commands and runs them when the block exits.
 
-**Returns.** A context manager.
+On entry, stops and clears the queue. Inside the block, the DobotLab functions only queue their command. On exit, starts the queue and waits until every command has executed. If the block raises, the queued commands are discarded. Nested blocks take effect only at the outermost level. `move_to` with `wait=True`, `wait_for`, and `wait_idle` do not return inside the block.
 
-**Protocol.** Sends [`SET_QUEUED_CMD_STOP_EXEC`](../protocol/command-ids.md) (241) on entry, your moves while inside, then [`SET_QUEUED_CMD_START_EXEC`](../protocol/command-ids.md) (240) on exit.
+**Returns** A context manager that yields the `Magician` instance.
 
-**Example.**
+**Raises** [`DobotAlarmError`](errors.md#dobotalarmerror) subclass: the arm reported an alarm while running the commands.
+
+**Example**
 
 ```python
 with bot.batch():
     for x, y in points:
-        bot.move_to(x, y, 0, 0, wait=False)
-# Queue resumes here - arm runs the whole sequence as one continuous program.
-bot.wait_idle()
+        bot.ptp(mode=2, x=x, y=y, z=50, r=0)  # MOVL_XYZ
 ```
+
+---
+
+## `Magician.start_queue` {#start_queue}
+
+```python
+Magician.start_queue() -> None
+```
+
+Start executing queued commands.
+
+[`connect`](magician.md#connect) calls this method when `auto_start_queue=True`.
+
+---
+
+## `Magician.stop_queue` {#stop_queue}
+
+```python
+Magician.stop_queue() -> None
+```
+
+Pause execution of queued commands.
+
+Queued commands are kept, and new commands can still be queued.
+
+---
+
+## `Magician.force_stop_queue` {#force_stop_queue}
+
+```python
+Magician.force_stop_queue() -> None
+```
+
+Stop execution of queued commands immediately, including the command in progress.
+
+---
+
+## `Magician.clear_queue` {#clear_queue}
+
+```python
+Magician.clear_queue() -> None
+```
+
+Remove all queued commands.
+
+---
+
+## `Magician.queued_cmd_current_index` {#queued_cmd_current_index}
+
+```python
+Magician.queued_cmd_current_index() -> int
+```
+
+Read the index of the last executed queued command.
+
+---
+
+## `Magician.queued_cmd_left_space` {#queued_cmd_left_space}
+
+```python
+Magician.queued_cmd_left_space() -> int
+```
+
+Read the number of free slots in the firmware queue.

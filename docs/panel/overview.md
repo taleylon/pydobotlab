@@ -1,29 +1,31 @@
-# Control Panel - Overview
+# Control panel
 
-`pydobotlab-panel` is the PySide6 control-panel GUI. It replaces the right-hand "Arm Control Panel" of the official DobotStudio / DobotLab desktop app and adds two things the official tool didn't have:
+`pydobotlab-panel` is a desktop control panel for the Magician, built with PySide6. It shows the arm pose live while a script is running, and a script and the panel can control the same arm at the same time through the [broker](broker.md).
 
-1. **A live pose readout** that updates while a Python script is running (driven by a [pose stream](../api/pose-stream.md)).
-2. **A broker** that lets the panel and your script share one arm at the same time.
-
-The panel is a soft dependency - install PySide6 if you want it, skip it if you don't:
+PySide6 is installed with the `gui` extra:
 
 ```bash
-pip install PySide6
+python -m pip install "pydobotlab[gui]"
 ```
 
-## What's on screen
+## Windows
 
-* **Hub window** - lists every connected arm. Each row has a "Connect" button that opens (or re-opens) a per-arm Control Panel.
-* **Control Panel** *(one per arm)* - the actual driver UI:
-  * Live X/Y/Z/R + J1..J4 readout, refreshed at ~50 Hz.
-  * Coord-mode and Joint-mode JOG pads (X+/X−/Y+/Y−/Z+/Z−/R+/R−, plus J1..J4).
-  * Speed slider (drives both PTP and JOG ratios - see [`motion_params`](../api/speed.md#motion_params-property-tuplefloat-float) / [`set_jog_common_params`](../api/speed.md#set_jog_common_paramsvel_ratio-acc_ratio-int)).
-  * JUMP-mode parameter card (height, zlimit).
-  * Home / Clear Alarm buttons.
-  * Alarm banner: shows every active alarm on its own line as `"{TAG}: {explanation + how to fix}"`.
-  * End-effector controls (suction cup, gripper).
+**Hub.** Lists the arms found, by port (`COM3`, `/dev/ttyACM0`). Only ports identified as a Dobot Magician ([Discovery](../api/discovery.md)) are listed as arms; ports that answer otherwise are under *Other devices (n)*, collapsed until clicked. *Refresh* scans again. *Open Control Panel* opens a control panel for the selected arm.
 
-## What runs where
+The hub and each control panel show the pydobotlab version at the bottom right.
+
+**Control panel.** One window per arm:
+
+- Pose readout: X, Y, Z, R and J1 to J4, refreshed at 30 Hz.
+- Jog pads for Cartesian and joint motion. Hold a segment to jog and release to stop.
+- Speed slider: the arm's point-to-point and jog speed ([`motion_params`](../api/speed.md#motion_params), [`set_jog_common_params`](../api/speed.md#set_jog_common_params)). The speed is stored in the arm, so scripts running on the same arm use it, and the slider follows changes made by scripts. Opening a panel keeps the arm's current speed.
+- JUMP parameters: lift height and Z limit.
+- Home and Clear Alarm buttons. If an alarm comes back after clearing, Clear Alarm shows the alarm and its remedy, and the alarm stays active.
+- End-effector controls for the suction cup and gripper. They act at once, also while a script moves the arm.
+- Connection indicator: checks the arm every 2 seconds and shows *Disconnected*, with a *Reconnect* button, after 3 consecutive failed checks.
+- Alarm banner: one line per active alarm, in the form `TAG: remedy`.
+
+## Structure
 
 ```
                         ┌─────────────────┐
@@ -44,9 +46,6 @@ pip install PySide6
                               the arms
 ```
 
-Each `ControlPanel` owns its own `Magician` and its own `PoseStreamer` (a `QThread` polling `get_pose` and emitting Qt signals). All panels connect through the broker so a parallel script can share each arm.
+Each `ControlPanel` has its own `Magician` and its own `PoseStreamer`, a `QThread` that polls `get_pose` and emits Qt signals. All panels connect through the broker, so scripts can share each arm.
 
-## Pages in this section
-
-* [Running the panel](running.md) - installation, command-line flags, simulator mode.
-* [The DobotBroker](broker.md) - the TCP server that fans out one serial port to many clients.
+See [Running the panel](running.md) and [The DobotBroker](broker.md).

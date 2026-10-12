@@ -1,159 +1,211 @@
-# Discovery (finding arms)
+# Discovery
 
-`pydobotlab.discovery` is the small module that figures out which serial ports might be Dobots and probes them. Almost everyone uses it indirectly via `Magician(port=None)`, but it's also exposed as a direct API for the cases where you want to enumerate, label, or steer arms by serial number.
+Find serial ports and probe them for Dobot Magician arms. The functions are also available as static methods of [`Discovery`](#discovery).
 
-Both module-level functions and a `Discovery` class namespace are exported; they're exactly equivalent.
+A port is identified as a Dobot Magician when it answers three read requests in the formats of the [Communication Protocol](../Dobot-Communication-Protocol-V1.1.5.pdf). The protocol has no command that reports the model. The requests do not move the arm or change its state.
+
+| Request | Expected reply | Protocol |
+|---|---|---|
+| `GetDeviceSN` | Command ID 0 and the serial number. | Table 6 |
+| `GetDeviceVersion` | Command ID 2 and three version bytes. | Table 12 |
+| `GetPose` | Command ID 10 and eight finite floats: X, Y, Z, R, and the four joint angles. | Table 22 |
+
+| Member | Description |
+|---|---|
+| [`list_ports`](#list_ports) | List serial ports. |
+| [`is_dobot`](#is_dobot) | Probe one port. |
+| [`discover`](#discover) | Probe all ports and return the arms found. |
+| [`discover_with_diagnostics`](#discover_with_diagnostics) | Probe all ports and return the arms found and the failures. |
+| [`find_free_port`](#find_free_port) | Return the first available arm port. |
+| [`is_port_in_use`](#is_port_in_use) | Whether a port is open in this process. |
+| [`Discovery`](#discovery) | Namespace of the discovery functions. |
+| [`PortInfo`](#portinfo) | Serial port description. |
+| [`DiscoveredDobot`](#discovereddobot) | Port identified as a Dobot Magician. |
+| [`ProbeFailure`](#probefailure) | Port that failed the probe. |
+| [`KNOWN_DOBOT_USB_IDS`](#known_dobot_usb_ids) | USB IDs of known Dobot adapters. |
+
+---
+
+## `list_ports` {#list_ports}
 
 ```python
-from pydobotlab import (
-    Discovery,
-    list_ports,
-    discover,
-    discover_with_diagnostics,
-    find_free_port,
-    is_dobot,
-    is_port_in_use,
-)
+pydobotlab.list_ports(*, only_known_adapters=False) -> list[PortInfo]
+```
+
+List serial ports. Known Dobot adapters are listed first. No data is sent to the ports.
+
+**Parameters**
+
+| Name | Type | Description |
+|---|---|---|
+| `only_known_adapters` | `bool`, default `False` | List only ports whose USB VID and PID are in [`KNOWN_DOBOT_USB_IDS`](#known_dobot_usb_ids). |
+
+**Returns** `list` of [`PortInfo`](#portinfo).
+
+---
+
+## `is_dobot` {#is_dobot}
+
+```python
+pydobotlab.is_dobot(port, *, timeout=None) -> bool
+```
+
+Return whether a Dobot Magician answers on `port`. Returns `True` for a port already open in this process.
+
+**Parameters**
+
+| Name | Type | Description |
+|---|---|---|
+| `port` | `str` | Serial port. |
+| `timeout` | `float` or `None`, default `None` | Reply timeout, seconds. `None` uses the configured default, `0.4` unless changed. |
+
+---
+
+## `discover` {#discover}
+
+```python
+pydobotlab.discover(*, only_known_adapters=False, timeout=None, skip=()) -> list[DiscoveredDobot]
+```
+
+Probe all ports and return those identified as a Dobot Magician. Ports open in this process are skipped.
+
+**Parameters**
+
+| Name | Type | Description |
+|---|---|---|
+| `only_known_adapters` | `bool`, default `False` | Probe only ports whose USB VID and PID are in [`KNOWN_DOBOT_USB_IDS`](#known_dobot_usb_ids). |
+| `timeout` | `float` or `None`, default `None` | Reply timeout per port, seconds. `None` uses the configured default, `0.4` unless changed. |
+| `skip` | iterable of `str`, default `()` | Ports not to probe. |
+
+**Returns** `list` of [`DiscoveredDobot`](#discovereddobot).
+
+**Example**
+
+```python
+ports = {arm.serial_number: arm.port for arm in discover()}
+left = Magician(port=ports["MAG-001"])
 ```
 
 ---
 
-## `list_ports(*, only_known_adapters=False) -> list[PortInfo]`
-
-**Purpose.** Enumerate serial ports the OS sees, flag the ones whose USB VID/PID matches a known Dobot adapter, and tell you which are already claimed by a Magician instance in this process.
-
-**Inputs.**
-
-| Arg | Type | Default | Meaning |
-|-----|------|---------|---------|
-| `only_known_adapters` | `bool` | `False` | If `True`, drop ports whose USB VID/PID is not in `KNOWN_DOBOT_USB_IDS`. Defaults to `False` so a Dobot behind a not-yet-seen adapter still shows up. |
-
-**Returns.** `list[PortInfo]`. Sorted with known-adapter ports first.
-
-**No protocol I/O** - this is a pure OS enumeration. No frames are sent.
-
----
-
-## `is_dobot(port, *, timeout=0.4) -> bool`
-
-**Purpose.** Quickly probe one port to see whether a Dobot answers.
-
-**Inputs.**
-
-| Arg | Type | Default | Meaning |
-|-----|------|---------|---------|
-| `port` | `str` | – | OS device path / COM name. |
-| `timeout` | `float` | `0.4` | Seconds to wait for a reply. |
-
-**Returns.** `bool`.
-
-**Protocol.** Opens the port, sends [`GET_DEVICE_SN`](../protocol/command-ids.md) (0) read + immediate, returns `True` if a well-formed response comes back.
-
----
-
-## `discover(*, only_known_adapters=False, timeout=0.4, skip=()) -> list[DiscoveredDobot]`
-
-**Purpose.** Probe every candidate port and return the ones that answered like a Dobot, with each one's serial number.
-
-**Inputs.**
-
-| Arg | Type | Default | Meaning |
-|-----|------|---------|---------|
-| `only_known_adapters` | `bool` | `False` | Same meaning as in `list_ports`. |
-| `timeout` | `float` | `0.4` | Per-port probe timeout. |
-| `skip` | iterable of `str` | `()` | Ports to skip (e.g. ones you've already opened elsewhere). |
-
-**Returns.** `list[DiscoveredDobot]`. Each entry has `.port`, `.serial_number`, `.description`.
-
-**Protocol.** Same probe as `is_dobot()` per port - [`GET_DEVICE_SN`](../protocol/command-ids.md) (0).
-
-**Example - pin specific arms by serial:**
+## `discover_with_diagnostics` {#discover_with_diagnostics}
 
 ```python
-from pydobotlab import discover, Magician
+pydobotlab.discover_with_diagnostics(*, only_known_adapters=False, timeout=None, skip=()) -> tuple[list[DiscoveredDobot], list[ProbeFailure]]
+```
 
-machines = {h.serial_number: h.port for h in discover()}
-left = Magician(port=machines["MAG-001"])
-right = Magician(port=machines["MAG-002"])
+Probe all ports and return the arms found and the ports that failed. Parameters are the same as for [`discover`](#discover).
+
+**Returns** `tuple`: `(found, failures)`, a list of [`DiscoveredDobot`](#discovereddobot) and a list of [`ProbeFailure`](#probefailure).
+
+**Example**
+
+```python
+found, failures = discover_with_diagnostics()
+for failure in failures:
+    print(failure.port, failure.reason, failure.detail)
 ```
 
 ---
 
-## `discover_with_diagnostics(*, only_known_adapters=False, timeout=0.4, skip=()) -> tuple[list[DiscoveredDobot], list[ProbeFailure]]`
-
-**Purpose.** Same as [`discover`](#discover-only_known_adaptersfalse-timeout04-skip-listdiscovereddobot), but also returns the list of ports that were *tried* but didn't qualify, with a reason for each. Useful for telling a user *why* a particular port didn't show up rather than silently dropping it.
-
-This is what the panel hub uses, so that ttyACM ports on Linux are surfaced with the relevant fix-it message instead of just disappearing. See [Linux setup](../getting-started/linux.md) for the common ttyACM gotchas (dialout group, brltty hijacking).
-
-**Inputs.** Same as `discover()`.
-
-**Returns.** `(hits, failures)` - `hits: list[DiscoveredDobot]`, `failures: list[`[`ProbeFailure`](#probefailure)`]`.
-
-**Example.**
+## `find_free_port` {#find_free_port}
 
 ```python
-from pydobotlab import Discovery
-
-hits, failures = Discovery.discover_with_diagnostics()
-print("found:", hits)
-for f in failures:
-    print(f"  rejected {f.port}: {f.reason} - {f.detail}")
+pydobotlab.find_free_port(*, only_known_adapters=False) -> str | None
 ```
 
----
+Return the first port identified as a Dobot Magician and not open in this process, or `None`.
 
-## `find_free_port(*, only_known_adapters=False) -> str | None`
+**Parameters**
 
-**Purpose.** Return the first available Dobot port (enumerated by the OS, not in use, and answering `GET_DEVICE_SN`), or `None`.
-
-**Returns.** `str | None`.
-
----
-
-## `is_port_in_use(port) -> bool`
-
-**Purpose.** `True` if `port` is currently held by a `Magician` in *this process*. (Cross-process collisions are caught at `connect()` time and surface as [`DobotPortInUseError`](errors.md#dobotportinuseerror-extends-dobotconnectionerror).)
-
-**Returns.** `bool`. No protocol I/O.
+| Name | Type | Description |
+|---|---|---|
+| `only_known_adapters` | `bool`, default `False` | Probe only ports whose USB VID and PID are in [`KNOWN_DOBOT_USB_IDS`](#known_dobot_usb_ids). |
 
 ---
 
-## `PortInfo`
-
-| Field | Type | Meaning |
-|-------|------|---------|
-| `port` | `str` | OS device name. |
-| `description` | `str` | OS-supplied description (e.g. `"USB Serial - CH340"`). |
-| `vid, pid` | `int \| None` | USB vendor / product IDs. |
-| `serial_number` | `str \| None` | USB descriptor SN (the cable's, not the arm's). |
-| `is_known_dobot_adapter` | `bool` | VID/PID is in `KNOWN_DOBOT_USB_IDS`. |
-| `is_claimed` | `bool` | Already opened by a `Magician` in this process. |
-
-## `DiscoveredDobot`
-
-| Field | Type | Meaning |
-|-------|------|---------|
-| `port` | `str` | OS device name. |
-| `serial_number` | `str` | The **arm's** serial number (returned by `GET_DEVICE_SN`). Use this to pin specific arms across reboots. |
-| `description` | `str` | Forwarded from `PortInfo`. |
-
-## `ProbeFailure`
-
-Returned by `discover_with_diagnostics()` for each port that was tried but didn't pass the probe.
-
-| Field | Type | Meaning |
-|-------|------|---------|
-| `port` | `str` | OS device name. |
-| `description` | `str` | Forwarded from `PortInfo`. |
-| `reason` | `str` | One of: `"permission"` (e.g. dialout group missing), `"busy"` (held by another process / brltty), `"no_reply"` (port opened but the device didn't respond like a Dobot), `"other"`. |
-| `detail` | `str` | Full error message. |
-
-## `KNOWN_DOBOT_USB_IDS`
-
-Settable `set[tuple[int, int]]` of `(vid, pid)` pairs treated as Dobot adapters. The default contains `(0x1A86, 0x7523)` (WCH CH340 - every Magician seen in the wild). Extend at runtime if your hardware revision uses a different adapter:
+## `is_port_in_use` {#is_port_in_use}
 
 ```python
-from pydobotlab.discovery import KNOWN_DOBOT_USB_IDS
+pydobotlab.is_port_in_use(port) -> bool
+```
 
+Return whether `port` is open by a `Magician` in this process. A port held by another process is reported by [`connect`](magician.md#connect) as [`DobotPortInUseError`](errors.md#dobotportinuseerror).
+
+---
+
+## `Discovery` {#discovery}
+
+```python
+class pydobotlab.Discovery
+```
+
+Namespace that exposes the discovery functions as static methods: `Discovery.list_ports`, `Discovery.is_dobot`, `Discovery.discover`, `Discovery.discover_with_diagnostics`, `Discovery.find_free_port`, and `Discovery.is_port_in_use`.
+
+---
+
+## `PortInfo` {#portinfo}
+
+```python
+class pydobotlab.PortInfo(port, description="", vid=None, pid=None, serial_number=None, is_known_dobot_adapter=False, is_claimed=False)
+```
+
+Serial port returned by [`list_ports`](#list_ports). Immutable.
+
+| Attribute | Type | Description |
+|---|---|---|
+| `port` | `str` | Port name. |
+| `description` | `str` | Description from the operating system. |
+| `vid`, `pid` | `int` or `None` | USB vendor and product IDs. |
+| `serial_number` | `str` or `None` | Serial number of the USB adapter. |
+| `is_known_dobot_adapter` | `bool` | VID and PID belong to a known Dobot adapter ([`KNOWN_DOBOT_USB_IDS`](#known_dobot_usb_ids)). |
+| `is_claimed` | `bool` | The port is open by a `Magician` in this process. |
+
+---
+
+## `DiscoveredDobot` {#discovereddobot}
+
+```python
+class pydobotlab.DiscoveredDobot(port, serial_number, description="")
+```
+
+Port identified as a Dobot Magician. Immutable.
+
+| Attribute | Type | Description |
+|---|---|---|
+| `port` | `str` | Port name. |
+| `serial_number` | `str` | Serial number of the arm. |
+| `description` | `str` | Description from the operating system. |
+
+---
+
+## `ProbeFailure` {#probefailure}
+
+```python
+class pydobotlab.ProbeFailure(port, description, reason, detail)
+```
+
+Port that failed the probe in [`discover_with_diagnostics`](#discover_with_diagnostics). Immutable.
+
+| Attribute | Type | Description |
+|---|---|---|
+| `port` | `str` | Port name. |
+| `description` | `str` | Description from the operating system. |
+| `reason` | `str` | `"permission"`: access denied by the operating system. `"busy"`: the port is held by another program. `"no_reply"`: the port opened but did not answer as a Dobot Magician. `"other"`: any other failure. |
+| `detail` | `str` | Error message. |
+
+---
+
+## `KNOWN_DOBOT_USB_IDS` {#known_dobot_usb_ids}
+
+```python
+pydobotlab.KNOWN_DOBOT_USB_IDS: set[tuple[int, int]]
+```
+
+USB `(vid, pid)` pairs of known Dobot adapters. Contains `(0x1A86, 0x7523)` (WCH CH340) by default. Add pairs to recognize other adapters.
+
+**Example**
+
+```python
 KNOWN_DOBOT_USB_IDS.add((0x10C4, 0xEA60))
 ```

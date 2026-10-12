@@ -1,56 +1,53 @@
 # Hello, Magician
 
-Your first program: home the arm, move to a couple of points, and read back the pose.
+A first program that homes the arm, moves it, and reads its pose.
 
 ```python
 from pydobotlab import Magician
 
 with Magician() as bot:
-    # 1. Send the arm to its home position. Blocks until done.
     bot.set_home()
 
-    # 2. Move to (200, 0, 50) mm with the end-effector pointing at R = 0°.
-    #    Cartesian, joint-interpolated. Blocks by default.
-    bot.move_to(200, 0, 50, 0)
+    # Move to x=200, y=0, z=50 mm with rotation 0 degrees.
+    bot.ptp(mode=1, x=200, y=0, z=50, r=0)
 
-    # 3. Read the current pose and print it.
     pose = bot.get_pose()
     print(f"x={pose.x:.1f}  y={pose.y:.1f}  z={pose.z:.1f}  r={pose.r:.1f}")
     print(f"joints: {pose.joints}")
 
-    # 4. Swing left, then right.
-    bot.move_to(150, 120, 50, 0)
-    bot.move_to(150, -120, 50, 0)
+    bot.ptp(mode=1, x=150, y=120, z=50, r=0)
+    bot.ptp(mode=1, x=150, y=-120, z=50, r=0)
 
-    # 5. Back to home.
     bot.set_home()
 ```
 
-Things to notice:
+- `with Magician() as bot:` connects on entry and disconnects on exit, including when an exception is raised.
+- `set_home` returns when the arm has homed, and [`ptp`](../api/motion.md#ptp) returns when the move has ended. Each command starts after the previous one.
+- `mode=1` is `MOVJ_XYZ`, a joint-interpolated move to a Cartesian target. See [`PTPMode`](../api/motion.md#ptpmode) for all modes.
+- `get_pose` returns a [`Pose`](../api/motion.md#pose) with the attributes `x`, `y`, `z`, `r`, and `joints`. It also unpacks as `x, y, z, r, joints`.
 
-* `with Magician() as bot:` opens the port on entry and closes it on exit (so you don't leak the serial device if your script crashes).
-* `set_home()` and `move_to()` **block** until the firmware has executed them. Pass `wait=False` if you want to fire-and-forget.
-* `get_pose()` returns a [`Pose`](../api/motion.md#pose) - namedtuple-like, accessible by `.x .y .z .r` *and* by index, with a `.joints` property for the four joint angles.
-
-## Adding the suction cup
+## Suction cup
 
 ```python
 with Magician() as bot:
     bot.set_home()
-    bot.move_to(200, 80, -30, 0)
-    bot.set_endeffector_suctioncup(enable=True, on=True)  # pick up
-    bot.move_to(200, 80, 60, 0)
-    bot.move_to(200, -80, 60, 0)
-    bot.move_to(200, -80, -30, 0)
+    bot.jump_params = 150, 30  # zlimit 150 mm, lift height 30 mm
+
+    bot.ptp(mode=0, x=200, y=80, z=-30, r=0)
+    bot.set_endeffector_suctioncup(enable=True, on=True)  # pick
+    bot.ptp(mode=0, x=200, y=-80, z=-30, r=0)
     bot.set_endeffector_suctioncup(enable=True, on=False)  # release
+
     bot.set_home()
 ```
 
-`enable` activates the cup (mounts it as the active end-effector); `on` opens or closes the valve. Same shape for [`set_endeffector_gripper()`](../api/end-effectors.md#set_endeffector_gripperenable-on-int).
+`mode=0` is `JUMP_XYZ`: the arm lifts, travels, and descends in one command. The lift height and Z limit are set by [`jump_params`](../api/speed.md#jump_params).
 
-## Catching mistakes
+`enable` powers the end effector and `on` applies suction. [`set_endeffector_gripper`](../api/end-effectors.md#set_endeffector_gripper) takes the same arguments.
 
-`move_to()` raises [`DobotKinematicError`](../api/errors.md#dobotkinematicerror-extends-dobotalarmerror) if the target is unreachable, the IK has no solution, or a joint limit is hit during the motion. The exception message includes a per-alarm troubleshoot line so you know what to fix and how:
+## Handling errors
+
+When the arm reports an alarm, the command raises an exception and the program stops. For an unreachable target or a joint limit, `ptp` raises [`DobotKinematicError`](../api/errors.md#dobotkinematicerror). The message lists each alarm with a remedy. The arm refuses further commands until the alarm is cleared.
 
 ```python
 from pydobotlab import Magician
@@ -58,15 +55,15 @@ from pydobotlab.errors import DobotKinematicError
 
 with Magician() as bot:
     try:
-        bot.move_to(9999, 0, 0, 0)  # way outside reach
-    except DobotKinematicError as e:
-        print(e)
-        bot.clear_alarm()  # back to a clean state
+        bot.ptp(mode=1, x=9999, y=0, z=0, r=0)  # outside the workspace
+    except DobotKinematicError as error:
+        print(error)
+        bot.clear_alarm()
 ```
 
-See [Alarms](../api/alarms.md) and [Errors & exceptions](../api/errors.md) for the full picture.
+See [Workspace](../guide/workspace.md), [Alarms and recovery](../guide/alarms.md), and [Exceptions](../api/errors.md).
 
 ## Next
 
-* [Running without hardware (simulator) →](simulator.md)
-* [API Reference overview →](../api/overview.md)
+- [Running without hardware](simulator.md)
+- [API reference](../api/overview.md)

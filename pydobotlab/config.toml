@@ -1,0 +1,49 @@
+# pydobotlab settings.
+#
+# Each user has a copy of this file, created on first use. A value passed as an
+# argument in code overrides the value here. Durations are in seconds.
+
+[serial]
+baudrate = 115200
+timeout = 1.0                 # read timeout per byte
+
+[broker]
+host = "127.0.0.1"
+port = 8765
+probe_timeout = 0.15          # checking whether a broker is running
+probe_cache_seconds = 2.0     # how long the result of that check is reused
+connect_timeout = 2.0         # client connecting to the broker and attaching to a port
+handshake_timeout = 1.0       # broker waiting for the first request of a client
+frame_timeout = 5.0           # broker waiting for the rest of a frame that has started
+reply_margin = 5.0            # client waits the serial timeout plus this margin
+
+[discovery]
+probe_timeout = 0.4           # reply timeout for each probed port
+extra_usb_ids = []            # more [vendor_id, product_id] adapters, e.g. [[0x10C4, 0xEA60]]
+
+[panel]
+pose_hz = 30.0                # pose readout refresh rate
+alarm_hz = 2.0                # alarm banner refresh rate
+watchdog_interval = 2.0       # time between connection checks
+watchdog_failures = 3         # failed checks in a row before showing "Disconnected"
+
+[simulator]
+arms = 2
+speed_mm_per_s = 200.0        # point-to-point speed at 100 %
+jog_speed_mm_per_s = 80.0     # Cartesian jog speed at 100 %
+jog_speed_deg_per_s = 60.0    # joint and R jog speed at 100 %
+tick_hz = 30.0                # motion update rate
+# The simulator checks targets against the real arm's joint ranges and arm
+# lengths, not against [workspace].
+
+[workspace]
+# Bounds of the area the arm can reach, in mm, for programs to check their
+# targets against. A target outside them is out of reach; a target inside can
+# still be out of reach (for example far out and high). The arm does not read
+# these values. They can be narrowed, not widened.
+# Source: Dobot Magician V2 User Guide V2.3.1, Table 2.2 (maximum reach) and
+# Figure 2.2 (workspace side view, read from the drawing).
+min_radius_mm = 85.0          # distance from the base axis
+max_radius_mm = 320.0         # maximum reach
+z_min_mm = -170.0
+z_max_mm = 175.0

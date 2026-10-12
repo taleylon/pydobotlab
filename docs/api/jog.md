@@ -1,90 +1,94 @@
-# JOG (live, non-trajectory motion)
+# Jogging
 
-JOG is the firmware's mode for **live nudges** - push a button, the arm starts moving along that axis; release the button, it stops. Unlike PTP, there is no trajectory; the arm just integrates a velocity until the next JOG command tells it otherwise.
+Move continuously along one Cartesian axis or one joint until stopped.
 
-The control panel's directional buttons (X+/X−/Y+/Y−/Z+/Z−/R+/R− and J1+/J1−/...) are JOG.
+| Member | Description |
+|---|---|
+| [`Magician.jog`](#jog) | Start or stop jog motion. |
+| [`Magician.jog_stop`](#jog_stop) | Stop jog motion. |
+| [`JOGCmd`](#jogcmd) | Jog directions. |
+| [`JogMode`](#jogmode) | Cartesian or joint jogging. |
 
-> **Important - immediate frames.**
-> pydobotlab sends JOG as **immediate** (`isQueued=0`) frames, not queued ones. This is on purpose: when the firmware is in an alarm state the queue is paused, so a queued JOG-IDLE on button release would sit unexecuted and the arm would keep moving. Sending immediate makes start *and* stop reach the firmware regardless of queue state. See the [Control byte](../protocol/ctrl-byte.md) page.
+Jog velocity and acceleration are set with [`set_jog_common_params`](speed.md#set_jog_common_params).
 
 ---
 
-## `jog(cmd, mode=JogMode.COORDINATE) -> Frame`
-
-**Purpose.** Start (or stop) a JOG.
-
-**Inputs.**
-
-| Arg | Type | Default | Meaning |
-|-----|------|---------|---------|
-| `cmd` | [`JOGCmd`](#jogcmd) (or int) | – | Direction. `IDLE` (0) stops; `AP_DOWN`..`DN_DOWN` (1..8) start an axis. |
-| `mode` | [`JogMode`](#jogmode) | `COORDINATE` | Whether `cmd` is in Cartesian (X/Y/Z/R) or joint (J1..J4) space. |
-
-**Returns.** [`Frame`](../protocol/frame-format.md#frame-format) - the firmware's parsed acknowledgement.
-
-**Protocol.** [`SET_JOG_CMD`](../protocol/command-ids.md) (73), write + **immediate**. Param: `u8 isJoint | u8 cmd` (2 bytes). Response payload: empty (just an ack).
-
-**Example.**
+## `Magician.jog` {#jog}
 
 ```python
-from pydobotlab import Magician, JOGCmd, JogMode
-import time
+Magician.jog(cmd, mode=JogMode.COORDINATE) -> Frame
+```
 
-with Magician() as bot:
-    bot.jog(JOGCmd.AP_DOWN, JogMode.COORDINATE)  # start X+
-    time.sleep(0.5)
-    bot.jog_stop()  # stop
+Start or stop jog motion.
+
+Motion continues until the next `jog` call or [`jog_stop`](#jog_stop). Jog commands execute immediately and bypass the command queue.
+
+**Parameters**
+
+| Name | Type | Description |
+|---|---|---|
+| `cmd` | [`JOGCmd`](#jogcmd) or `int` | Direction. `JOGCmd.IDLE` stops. |
+| `mode` | [`JogMode`](#jogmode), default `JogMode.COORDINATE` | Interpret `cmd` as a Cartesian axis or a joint. |
+
+**Returns** [`Frame`](low-level.md#frame): acknowledgement from the arm.
+
+**Example**
+
+```python
+bot.jog(JOGCmd.AP_DOWN)  # start moving in +X
+time.sleep(0.5)
+bot.jog_stop()
 ```
 
 ---
 
-## `jog_stop() -> None`
+## `Magician.jog_stop` {#jog_stop}
 
-**Purpose.** Stop any active JOG. Best-effort: retries once on a transport error because a stuck jog is a safety hazard.
+```python
+Magician.jog_stop() -> None
+```
 
-**Inputs.** None.
+Stop jog motion.
 
-**Returns.** `None`.
+Retries once if sending the stop command fails.
 
-**Raises.** Doesn't propagate transport errors - eats them after one retry.
+**Raises**
 
-**Protocol.** Sends `SET_JOG_CMD` with `cmd=JOGCmd.IDLE`.
-
----
-
-## `JOGCmd`
-
-`from pydobotlab import JOGCmd`. Used as the `cmd` argument to `jog()`.
-
-| Member       | Value | In `COORDINATE` mode | In `JOINT` mode |
-|--------------|-------|----------------------|-----------------|
-| `IDLE`       | 0     | stop                 | stop            |
-| `AP_DOWN`    | 1     | X+                   | J1+             |
-| `AN_DOWN`    | 2     | X−                   | J1−             |
-| `BP_DOWN`    | 3     | Y+                   | J2+             |
-| `BN_DOWN`    | 4     | Y−                   | J2−             |
-| `CP_DOWN`    | 5     | Z+                   | J3+             |
-| `CN_DOWN`    | 6     | Z−                   | J3−             |
-| `DP_DOWN`    | 7     | R+                   | J4+             |
-| `DN_DOWN`    | 8     | R−                   | J4−             |
-
-(The naming `*_DOWN` matches the official Dobot SDK and dates from "key down" terminology in DobotLab - it does *not* mean the Z axis.)
+- [`DobotConnectionError`](errors.md#dobotconnectionerror) or [`DobotTimeoutError`](errors.md#dobottimeouterror): the retry also failed. The arm may still be moving.
 
 ---
 
-## `JogMode`
+## `JOGCmd` {#jogcmd}
 
-`from pydobotlab import JogMode`. Picks the frame `cmd` is interpreted in.
+```python
+class pydobotlab.JOGCmd(IntEnum)
+```
 
-| Member       | Value | Meaning |
-|--------------|-------|---------|
-| `COORDINATE` | 0     | Cartesian: X / Y / Z / R. |
-| `JOINT`      | 1     | Joints: J1 / J2 / J3 / J4. |
+Jog directions for [`jog`](#jog).
+
+| Member | Value | `COORDINATE` mode | `JOINT` mode |
+|---|---|---|---|
+| `IDLE` | 0 | Stop | Stop |
+| `AP_DOWN` | 1 | X+ | J1+ |
+| `AN_DOWN` | 2 | X- | J1- |
+| `BP_DOWN` | 3 | Y+ | J2+ |
+| `BN_DOWN` | 4 | Y- | J2- |
+| `CP_DOWN` | 5 | Z+ | J3+ |
+| `CN_DOWN` | 6 | Z- | J3- |
+| `DP_DOWN` | 7 | R+ | J4+ |
+| `DN_DOWN` | 8 | R- | J4- |
 
 ---
 
-## How fast does JOG move?
+## `JogMode` {#jogmode}
 
-JOG speed is set globally for all jogs by [`set_jog_common_params(vel_ratio, acc_ratio)`](speed.md#set_jog_common_paramsvel_ratio-acc_ratio-int) - both numbers are percentages (`0..100`) of the firmware's full-speed baseline. The control panel's speed slider drives this.
+```python
+class pydobotlab.JogMode(IntEnum)
+```
 
-To read back the current ratios: [`get_jog_common_params()`](speed.md#get_jog_common_params-tuplefloat-float) returns `(vel_ratio, acc_ratio)`.
+Frame in which [`jog`](#jog) interprets its direction.
+
+| Member | Value | Description |
+|---|---|---|
+| `COORDINATE` | 0 | Cartesian axes X, Y, Z, and R. |
+| `JOINT` | 1 | Joints J1 to J4. |

@@ -114,35 +114,6 @@ QPushButton#danger:hover {
     background: #d44949;
 }
 
-/* Jog buttons inside JogPad - round with subtle glow on press */
-QPushButton#jog {
-    background: #2a2f3a;
-    border: 1px solid #3a4150;
-    border-radius: 28px;
-    min-width: 56px;
-    min-height: 56px;
-    color: #cfd6e3;
-    font-weight: 600;
-}
-
-QPushButton#jog:hover {
-    border-color: #4a90e2;
-    color: #ffffff;
-}
-
-QPushButton#jog:pressed {
-    background: #1a3a55;
-    border-color: #6cc6ff;
-    color: #ffffff;
-}
-
-QPushButton#jogSmall {
-    min-width: 44px;
-    min-height: 44px;
-    border-radius: 22px;
-    font-size: 10pt;
-}
-
 QSlider::groove:horizontal {
     background: #14171c;
     height: 6px;
@@ -200,19 +171,23 @@ QCheckBox::indicator:checked {
     border-color: #6cc6ff;
 }
 
-QListView, QListWidget {
+QListView, QListWidget, QTreeView, QTreeWidget {
     background: #14171c;
     border: 1px solid #2e3340;
     border-radius: 4px;
     padding: 4px;
 }
 
-QListWidget::item {
+QTreeView {
+    outline: 0;
+}
+
+QListWidget::item, QTreeWidget::item {
     padding: 8px 10px;
     border-radius: 4px;
 }
 
-QListWidget::item:selected {
+QListWidget::item:selected, QTreeWidget::item:selected {
     background: #1a3a55;
     color: #ffffff;
 }
@@ -221,4 +196,10 @@ QStatusBar {
     background: #14171c;
     color: #aab2c2;
     border-top: 1px solid #2e3340;
+}
+
+QLabel#version {
+    color: #7a8294;
+    font-size: 9pt;
+    padding: 0 6px;
 }

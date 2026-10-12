@@ -80,10 +80,9 @@ def main() -> int:
         # 6. Stack-then-execute (lazy run)
         path = [(200, -50, 0, 0), (200, 50, 0, 0), (250, 0, 0, 0), (200, 0, 50, 0)]
         print(f"queueing batch of {len(path)} moves...")
-        with bot.batch():
+        with bot.batch():  # runs and waits at the end of the block
             for x, y, z, r in path:
                 bot.ptp(PTPMode.MOVL_XYZ, x, y, z, r)
-        bot.wait_idle(timeout=30)
         print("batch complete")
 
         # 7. Pose stream (pydobotlab addition; not in DobotLab)

@@ -1,4 +1,4 @@
-"""Find Dobot Magicians on the local machine.
+"""Find connected Dobot Magicians on the local machine.
 
 This module deliberately lives *outside* the :class:`Dobot` class - discovery
 is independent of any one device, and a :class:`Dobot` instance should never
@@ -10,10 +10,10 @@ both for callers who prefer the class-method style:
 * :func:`list_ports` enumerates serial ports the OS sees and flags ones whose
   USB VID/PID matches a known Dobot adapter. Fast, side-effect free, but a
   USB-serial dongle for *something else* could also match.
-* :func:`discover` opens each candidate, sends ``GetDeviceSN`` and waits for
-  a response. Slower but authoritative - anything in the result really is a
-  Dobot, and the serial number lets you pin a particular arm to a particular
-  variable across sessions.
+* :func:`discover` opens each candidate and identifies it with
+  :func:`identify_magician`. Slower but authoritative - anything in the result
+  answered as a Dobot Magician, and the serial number lets you pin a
+  particular arm to a particular variable across sessions.
 
 USB IDs
 ~~~~~~~
@@ -27,11 +27,19 @@ hardware revision uses a different adapter::
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable
 from dataclasses import dataclass
 
 from .commands import CommandID
-from .errors import DobotConnectionError, DobotPortInUseError
+from .config import get_config
+from .errors import (
+    DobotConnectionError,
+    DobotPermissionError,
+    DobotPortInUseError,
+    DobotProtocolError,
+)
+from .protocol import Frame, unpack_floats
 from .transport import SerialTransport, is_port_claimed
 
 # Verified VID/PID pairs that have been observed shipping with the Dobot
@@ -90,9 +98,11 @@ def list_ports(*, only_known_adapters: bool = False) -> list[PortInfo]:
             "install pydobotlab with `pip install -e .` or `pip install pyserial`"
         ) from error
 
+    configured_usb_ids = {tuple(pair) for pair in get_config()["discovery"]["extra_usb_ids"]}
+    known_usb_ids = KNOWN_DOBOT_USB_IDS | configured_usb_ids
     ports: list[PortInfo] = []
     for port_info in serial_ports.comports():
-        is_known = (port_info.vid, port_info.pid) in KNOWN_DOBOT_USB_IDS
+        is_known = (port_info.vid, port_info.pid) in known_usb_ids
         if only_known_adapters and not is_known:
             continue
         ports.append(
@@ -110,12 +120,50 @@ def list_ports(*, only_known_adapters: bool = False) -> list[PortInfo]:
     return ports
 
 
-def is_dobot(port: str, *, timeout: float = 0.4) -> bool:
-    """Quickly probe ``port`` to see whether a Dobot answers.
+def request_as_magician(
+    transport: SerialTransport, command_id: CommandID, minimum_length: int, what: str
+) -> Frame:
+    """Send the read request ``command_id``; raise unless the reply has the Magician's format."""
+    reply = transport.send_frame(command_id, 0)
+    if reply.cmd_id != command_id or len(reply.params) < minimum_length:
+        raise DobotProtocolError(
+            f"{transport.port!r} is not a Dobot Magician: {what} request not answered "
+            f"as specified (command {reply.cmd_id}, {len(reply.params)} parameter bytes)"
+        )
+    return reply
 
-    Sends ``GetDeviceSN`` (cmd ID 0) and returns ``True`` if a well-formed
-    response comes back inside ``timeout`` seconds.
+
+def identify_magician(transport: SerialTransport) -> str:
+    """Return the serial number of the Dobot Magician on ``transport``.
+
+    The protocol has no command that names the model, so the device is
+    identified by its replies to three read requests, in the formats of the
+    Communication Protocol V1.1.5: ``GetDeviceSN`` (command ID 0, the serial
+    number; Table 6), ``GetDeviceVersion`` (command ID 2, three version bytes;
+    Table 12), and ``GetPose`` (command ID 10, eight finite floats: X, Y, Z, R,
+    and the four joint angles; Table 22). A device that echoes the request
+    fails the second check. The requests do not move the arm or change its
+    state. Raises :class:`DobotProtocolError` for any other reply.
     """
+    serial_reply = request_as_magician(transport, CommandID.GET_DEVICE_SN, 0, "serial number")
+    request_as_magician(transport, CommandID.GET_DEVICE_VERSION, 3, "version")
+    pose_reply = request_as_magician(transport, CommandID.GET_POSE, 32, "pose")
+    if not all(math.isfinite(value) for value in unpack_floats(pose_reply.params[:32])):
+        raise DobotProtocolError(
+            f"{transport.port!r} is not a Dobot Magician: pose request answered with "
+            "values that are not numbers"
+        )
+    return serial_reply.params.rstrip(b"\x00").decode("ascii", errors="replace")
+
+
+def is_dobot(port: str, *, timeout: float | None = None) -> bool:
+    """Quickly probe ``port`` to see whether a Dobot Magician answers.
+
+    Returns ``True`` if :func:`identify_magician` accepts the replies within
+    ``timeout`` seconds per reply (default: the configured value).
+    """
+    if timeout is None:
+        timeout = get_config()["discovery"]["probe_timeout"]
     if is_port_claimed(port):
         # We hold it open already - by definition it answered our probe before.
         return True
@@ -126,7 +174,7 @@ def is_dobot(port: str, *, timeout: float = 0.4) -> bool:
         return False
     try:
         try:
-            transport.send_frame(CommandID.GET_DEVICE_SN, 0)
+            identify_magician(transport)
             return True
         except Exception:
             return False
@@ -141,20 +189,20 @@ class ProbeFailure:
     Surfaced via :func:`discover_with_diagnostics` so callers can tell the
     user *why* a port was rejected - "permission denied", "didn't answer",
     "busy" - rather than silently dropping it. This is what the panel uses
-    to explain ttyACM-on-Linux pitfalls (dialout group, brltty grabbing the
-    device) instead of just saying "no Dobots found".
+    to explain ttyACM-on-Linux pitfalls (dialout group) instead of just
+    saying "no Dobots found".
     """
 
     port: str
     description: str
-    reason: str  # short label: "permission", "busy", "no_reply", "other"
+    reason: str  # "permission", "busy", "no_reply" (not a Dobot Magician), "other"
     detail: str  # full error message
 
 
 def discover(
     *,
     only_known_adapters: bool = False,
-    timeout: float = 0.4,
+    timeout: float | None = None,
     skip: Iterable[str] = (),
 ) -> list[DiscoveredDobot]:
     """Probe every candidate port; return ones that answer like a Dobot.
@@ -177,7 +225,7 @@ def discover(
 def discover_with_diagnostics(
     *,
     only_known_adapters: bool = False,
-    timeout: float = 0.4,
+    timeout: float | None = None,
     skip: Iterable[str] = (),
 ) -> tuple[list[DiscoveredDobot], list[ProbeFailure]]:
     """Same as :func:`discover`, but also returns the list of ports that
@@ -187,13 +235,16 @@ def discover_with_diagnostics(
 
     Why this exists: on Linux the Magician sometimes enumerates as
     ``/dev/ttyACM0`` (CDC ACM driver) rather than ``/dev/ttyUSB0`` (CH340).
-    If the user isn't in the ``dialout`` group, or if ``brltty`` has grabbed
-    the device, opening it raises ``PermissionError`` / "device or resource
-    busy". The plain :func:`discover` would just drop the port and the user
-    sees "no Dobots found" with no hint why. With diagnostics, the panel can
-    say "we tried /dev/ttyACM0 but got permission denied - add yourself to
-    the dialout group" instead.
+    If the user isn't in the ``dialout`` group, opening it is denied. The
+    plain :func:`discover` would just drop the port and the user sees "no
+    Dobots found" with no hint why. With diagnostics, the panel can say
+    "permission denied for /dev/ttyACM0 - add yourself to the dialout group"
+    instead. ``reason`` is ``"permission"`` only when the device node
+    really is inaccessible to this user; a port another program holds is
+    ``"busy"``.
     """
+    if timeout is None:
+        timeout = get_config()["discovery"]["probe_timeout"]
     skip_set = set(skip)
     found: list[DiscoveredDobot] = []
     failed: list[ProbeFailure] = []
@@ -207,21 +258,10 @@ def discover_with_diagnostics(
         try:
             transport = SerialTransport(info.port, timeout=timeout)
             transport.open()
-        except DobotPortInUseError as error:
-            failed.append(
-                ProbeFailure(
-                    port=info.port,
-                    description=info.description,
-                    reason="busy",
-                    detail=str(error),
-                )
-            )
-            continue
         except DobotConnectionError as error:
-            msg = str(error).lower()
-            if "permission denied" in msg:
+            if isinstance(error, DobotPermissionError):
                 reason = "permission"
-            elif "device or resource busy" in msg or "in use" in msg:
+            elif isinstance(error, DobotPortInUseError):
                 reason = "busy"
             else:
                 reason = "other"
@@ -237,8 +277,7 @@ def discover_with_diagnostics(
         # Port opened; now probe.
         try:
             try:
-                frame = transport.send_frame(CommandID.GET_DEVICE_SN, 0)
-                serial_number = frame.params.rstrip(b"\x00").decode("ascii", errors="replace")
+                serial_number = identify_magician(transport)
                 found.append(
                     DiscoveredDobot(
                         port=info.port,
@@ -260,11 +299,28 @@ def discover_with_diagnostics(
     return found, failed
 
 
+def no_dobot_found_error(*, only_known_adapters: bool = False) -> DobotConnectionError:
+    """Build the error for "auto-pick found no Dobot", naming the real cause.
+
+    Re-scans with diagnostics so a Linux user who is not in the ``dialout``
+    group is told so, instead of getting a generic "nothing answered".
+    """
+    _, failures = discover_with_diagnostics(only_known_adapters=only_known_adapters)
+    permission_failures = [failure for failure in failures if failure.reason == "permission"]
+    if permission_failures:
+        return DobotPermissionError(permission_failures[0].detail)
+    busy_ports = [failure.port for failure in failures if failure.reason == "busy"]
+    if busy_ports:
+        return DobotPortInUseError(f"no Dobot found; port busy: {', '.join(busy_ports)}")
+    return DobotConnectionError("no Dobot found; check the USB cable and power")
+
+
 def find_free_port(*, only_known_adapters: bool = False) -> str | None:
     """Return the first available Dobot port, or ``None`` if there is none.
 
     "Available" means: enumerated by the OS, not currently held by any other
-    :class:`Dobot` instance in this process, and answering to ``GetDeviceSN``.
+    :class:`Dobot` instance in this process, and identified as a Dobot Magician
+    by :func:`identify_magician`.
     """
     devices = discover(only_known_adapters=only_known_adapters)
     return devices[0].port if devices else None

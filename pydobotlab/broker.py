@@ -1,41 +1,8 @@
-"""TCP broker for the Dobot Magician serial port.
+"""TCP broker that lets several clients share one Dobot serial port.
 
-Why a broker?
--------------
-
-A serial port can only be opened by one process at a time. That means a
-control-panel GUI and a Python script in PyCharm can't both talk to the
-same arm - one of them gets a "port busy" error. DobotStudio works around
-this with its **DobotLink** helper: a local daemon that owns the port and
-multiplexes traffic for everything else.
-
-This module is the equivalent for pydobotlab. When ``pydobotlab-panel`` runs,
-it boots a :class:`DobotBroker` on ``127.0.0.1:DEFAULT_BROKER_PORT``. The
-broker:
-
-* Owns the underlying :class:`~pydobotlab.transport.SerialTransport` for each
-  port that's been attached.
-* Accepts TCP connections from any number of in-process or out-of-process
-  clients (the panel itself, students' PyCharm scripts, Jupyter notebooks).
-* Serializes their requests through one per-port lock so frames can't
-  interleave on the wire.
-* Localhost-bind only; never accepts remote connections.
-
-Wire protocol (intentionally minimal, framed in the protocol layer
-already):
-
-    Handshake (one-shot, after connect):
-        client -> server:  0x01 PORT_LEN PORT_BYTES        (ATTACH cmd)
-                  or:      0x00                            (LIST_PORTS cmd)
-        server -> client:  0x00 (ok)  | 0x01 PORT (not_found, ATTACH)
-                  or:      N=u8 + (u8 len + bytes)*N       (LIST_PORTS reply)
-
-    After successful ATTACH, the connection is in "frame relay" mode:
-        client -> server:  u16-be length + raw Dobot frame
-        server -> client:  u16-be length + raw Dobot frame
-
-The "raw Dobot frame" is exactly what :func:`pydobotlab.protocol.pack`
-produces - header, len, ID, ctrl, params, checksum.
+:class:`DobotBroker` owns the serial transports and relays raw Dobot frames
+between them and any number of local TCP clients, one request at a time per
+port. The wire protocol is described in ``docs/panel/broker.md``.
 """
 
 from __future__ import annotations
@@ -46,16 +13,22 @@ import threading
 import time
 from contextlib import closing
 
-from .broker_protocol import receive_exactly, receive_frame_bytes, send_frame_bytes
-from .errors import DobotConnectionError, DobotProtocolError, DobotTimeoutError
+from .broker_protocol import (
+    error_code_for,
+    receive_exactly,
+    receive_frame_bytes,
+    send_error_reply,
+    send_frame_bytes,
+)
+from .config import get_config
+from .errors import (
+    DobotConnectionError,
+    DobotPermissionError,
+    DobotPortInUseError,
+    DobotProtocolError,
+)
 from .protocol import Frame, pack, unpack
 from .transport import SerialTransport
-
-DEFAULT_BROKER_HOST = "127.0.0.1"
-DEFAULT_BROKER_PORT = 8765
-DEFAULT_PROBE_TIMEOUT = 0.15  # seconds, for `is_broker_reachable`
-HANDSHAKE_TIMEOUT = 1.0
-FRAME_TIMEOUT = 5.0
 
 # Handshake command bytes
 CMD_LIST_PORTS = 0x00
@@ -66,6 +39,7 @@ REPLY_OK = 0x00
 REPLY_NOTFOUND = 0x01
 REPLY_BUSY = 0x02
 REPLY_BAD_CMD = 0x03
+REPLY_PERMISSION = 0x04
 
 
 # ---------------------------------------------------------------------------
@@ -83,15 +57,14 @@ class DobotBroker:
             ...
 
     Or just ``broker.start()`` / ``broker.stop()``.
+
+    ``host`` and ``port`` default to the configured values.
     """
 
-    def __init__(
-        self,
-        host: str = DEFAULT_BROKER_HOST,
-        port: int = DEFAULT_BROKER_PORT,
-    ) -> None:
-        self.host = host
-        self.port = port
+    def __init__(self, host: str | None = None, port: int | None = None) -> None:
+        settings = get_config()["broker"]
+        self.host = settings["host"] if host is None else host
+        self.port = settings["port"] if port is None else port
         self._transports: dict[str, SerialTransport] = {}
         # Per-port reference counts: how many TCP clients currently hold an
         # ATTACH on this port. We auto-detach lazily-attached ports when the
@@ -157,10 +130,16 @@ class DobotBroker:
     # -- transport ownership -------------------------------------------------
 
     def attach(
-        self, port: str, *, baudrate: int = 115200, timeout: float = 1.0, _lazy: bool = False
+        self,
+        port: str,
+        *,
+        baudrate: int | None = None,
+        timeout: float | None = None,
+        _lazy: bool = False,
     ) -> SerialTransport:
         """Open ``port`` and put it under broker management.
 
+        ``baudrate`` and ``timeout`` default to the configured values.
         If already attached, returns the existing transport. Pass
         ``_lazy=True`` (used by the TCP handler when a client requests a
         previously-unattached port) to mark the attach as auto-detachable
@@ -192,7 +171,8 @@ class DobotBroker:
     # -- client handling -----------------------------------------------------
 
     def _handle_client(self, connection: socket.socket) -> None:
-        connection.settimeout(HANDSHAKE_TIMEOUT)
+        settings = get_config()["broker"]
+        connection.settimeout(settings["handshake_timeout"])
         try:
             command = receive_exactly(connection, 1)[0]
         except (TimeoutError, ConnectionError, OSError):
@@ -222,9 +202,15 @@ class DobotBroker:
         if transport is None:
             try:
                 transport = self.attach(port_name, _lazy=True)
-            except DobotConnectionError:
+            except DobotConnectionError as error:
+                if isinstance(error, DobotPermissionError):
+                    failure_reply = REPLY_PERMISSION
+                elif isinstance(error, DobotPortInUseError):
+                    failure_reply = REPLY_BUSY
+                else:
+                    failure_reply = REPLY_NOTFOUND
                 try:
-                    connection.sendall(bytes([REPLY_NOTFOUND]))
+                    connection.sendall(bytes([failure_reply]))
                 except Exception:
                     pass
                 return
@@ -241,25 +227,39 @@ class DobotBroker:
         with self._transports_lock:
             self._client_counts[port_name] = self._client_counts.get(port_name, 0) + 1
 
-        # Frame relay loop
-        connection.settimeout(FRAME_TIMEOUT)
+        # Frame relay loop. A client may sit idle between requests for as long
+        # as it likes (a script waiting on input, a server waiting for
+        # requests), so only a frame already under way is subject to
+        # the frame timeout. TCP keepalive still reaps clients that vanished
+        # without closing the socket.
+        connection.settimeout(settings["frame_timeout"])
+        connection.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
         try:
             while True:
                 try:
-                    frame_bytes = receive_frame_bytes(connection)
-                except (TimeoutError, ConnectionError, OSError, DobotProtocolError):
+                    frame_bytes = receive_frame_bytes(connection, wait_forever=True)
+                except DobotProtocolError as error:
+                    # The byte stream is out of step, so say why and hang up.
+                    self._reply_error(connection, error)
                     return
+                except (TimeoutError, ConnectionError, OSError):
+                    return  # client went away or stalled mid-frame
+                # Every failure past this point is reported to the client as
+                # an error reply - never swallowed - and the connection stays
+                # open so the client decides whether to retry.
                 try:
                     request = unpack(frame_bytes)
                     response: Frame = transport.send_frame(
                         request.cmd_id, request.ctrl, request.params
                     )
-                    send_frame_bytes(
-                        connection, pack(response.cmd_id, response.ctrl, response.params)
-                    )
-                except DobotTimeoutError:
-                    return
-                except Exception:
+                    reply = pack(response.cmd_id, response.ctrl, response.params)
+                except Exception as error:
+                    if not self._reply_error(connection, error):
+                        return
+                    continue
+                try:
+                    send_frame_bytes(connection, reply)
+                except OSError:
                     return
         finally:
             # Decrement client count. If we lazily attached and we're the
@@ -267,6 +267,16 @@ class DobotBroker:
             # the port - otherwise a panel close would leave the broker
             # holding the port forever.
             self._release_client(port_name)
+
+    @staticmethod
+    def _reply_error(connection: socket.socket, error: Exception) -> bool:
+        """Send ``error`` to the client; ``False`` if the client is gone."""
+        message = str(error) or type(error).__name__
+        try:
+            send_error_reply(connection, error_code_for(error), message)
+        except OSError:
+            return False
+        return True
 
     def _release_client(self, port: str) -> None:
         """Decrement ref count; detach if zero clients remain on a lazy port."""
@@ -305,20 +315,27 @@ class DobotBroker:
 # every Dobot() construction would slow scripts noticeably.
 _BROKER_CACHE_LOCK = threading.Lock()
 _BROKER_CACHE: dict[tuple[str, int], tuple[float, bool]] = {}
-_BROKER_CACHE_TTL = 2.0
 
 
 def is_broker_reachable(
-    host: str = DEFAULT_BROKER_HOST,
-    port: int = DEFAULT_BROKER_PORT,
-    timeout: float = DEFAULT_PROBE_TIMEOUT,
+    host: str | None = None,
+    port: int | None = None,
+    timeout: float | None = None,
 ) -> bool:
-    """``True`` iff a :class:`DobotBroker` is accepting connections."""
+    """``True`` iff a :class:`DobotBroker` is accepting connections.
+
+    Arguments default to the configured values. A result is reused for a
+    short time.
+    """
+    settings = get_config()["broker"]
+    host = settings["host"] if host is None else host
+    port = settings["port"] if port is None else port
+    timeout = settings["probe_timeout"] if timeout is None else timeout
     key = (host, port)
     now = time.monotonic()
     with _BROKER_CACHE_LOCK:
         cached = _BROKER_CACHE.get(key)
-        if cached is not None and now - cached[0] < _BROKER_CACHE_TTL:
+        if cached is not None and now - cached[0] < settings["probe_cache_seconds"]:
             return cached[1]
 
     reachable = False
@@ -336,11 +353,18 @@ def is_broker_reachable(
 
 
 def list_broker_ports(
-    host: str = DEFAULT_BROKER_HOST,
-    port: int = DEFAULT_BROKER_PORT,
-    timeout: float = HANDSHAKE_TIMEOUT,
+    host: str | None = None,
+    port: int | None = None,
+    timeout: float | None = None,
 ) -> list[str]:
-    """Ask the broker which ports it currently has attached."""
+    """Ask the broker which ports it currently has attached.
+
+    Arguments default to the configured values.
+    """
+    settings = get_config()["broker"]
+    host = settings["host"] if host is None else host
+    port = settings["port"] if port is None else port
+    timeout = settings["handshake_timeout"] if timeout is None else timeout
     with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as connection:
         connection.settimeout(timeout)
         connection.connect((host, port))

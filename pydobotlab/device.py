@@ -14,19 +14,20 @@ from __future__ import annotations
 
 import re
 import struct
+import sys
 import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from queue import Queue
 
-from .alarms import Alarm, AlarmSet, decode_alarms
+from .alarms import AlarmSet, alarm_error, decode_alarms
 from .commands import CommandID
-from .discovery import find_free_port
+from .config import get_config
+from .discovery import find_free_port, no_dobot_found_error
 from .errors import (
-    DobotAlarmError,
     DobotConnectionError,
-    DobotKinematicError,
+    DobotError,
     DobotTimeoutError,
 )
 from .protocol import (
@@ -134,30 +135,15 @@ def parse_io_port(reference: str | int) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Motion-failure alarm codes. When any of these bits is set, the firmware
-# is telling us a motion command couldn't be planned or executed. Used by
-# the wait_for / wait_idle / move_to / set_home loops to raise
-# :class:`DobotKinematicError` instead of silently completing.
-MOTION_ALARM_CODES: frozenset[int] = frozenset(
-    {
-        Alarm.PLAN_INVERSE_RESOLVE,
-        Alarm.PLAN_INVERSE_LIMIT,
-        Alarm.PLAN_CURRENT_JOINT_OUT_OF_RANGE,
-        Alarm.PLAN_MOTION_TARGET_OUT_OF_WORKSPACE,
-        Alarm.PLAN_IN_SINGULARITY_ZONE,
-        Alarm.KINEMATIC_SINGULARITY,
-        Alarm.KINEMATIC_TARGET_OUT_OF_WORKSPACE,
-        Alarm.KINEMATIC_INVERSE_LIMIT,
-        Alarm.LIMIT_POS_J1,
-        Alarm.LIMIT_POS_J2,
-        Alarm.LIMIT_POS_J3,
-        Alarm.LIMIT_POS_J4,
-        Alarm.LIMIT_NEG_J1,
-        Alarm.LIMIT_NEG_J2,
-        Alarm.LIMIT_NEG_J3,
-        Alarm.LIMIT_NEG_J4,
-    }
+# Alarms
+# ---------------------------------------------------------------------------
+
+ALARM_REMEDY = (
+    "Clear it with clear_alarm() or the panel's Clear Alarm button, then run the program again."
 )
+
+# Time for the arm to raise an alarm again if its cause is still present.
+CLEAR_ALARM_SETTLE_SECONDS = 0.2
 
 
 # ---------------------------------------------------------------------------
@@ -190,16 +176,24 @@ class Magician:
     def __init__(
         self,
         port: str | None = None,
-        baudrate: int = 115200,
-        timeout: float = 1.0,
+        baudrate: int | None = None,
+        timeout: float | None = None,
         *,
         auto_start_queue: bool = True,
         only_known_adapters: bool = False,
         via_broker: bool | str = "auto",
-        broker_host: str = "127.0.0.1",
-        broker_port: int = 8765,
+        broker_host: str | None = None,
+        broker_port: int | None = None,
+        verbose: bool = True,
     ) -> None:
         """\
+        ``baudrate``, ``timeout``, ``broker_host`` and ``broker_port``:
+            Default to the configured values.
+
+        ``verbose``:
+            Print a one-line "Connected to <port>" / "Failed to connect: ..."
+            message from :meth:`connect`. Set ``False`` to stay silent.
+
         ``via_broker``:
             - ``"auto"`` (default) - at connect time, probe localhost for a
               running :class:`pydobotlab.broker.DobotBroker` and route through
@@ -208,14 +202,16 @@ class Magician:
             - ``True`` - require the broker; raise if unreachable.
             - ``False`` - never use the broker (always direct serial).
         """
+        config = get_config()
         self._explicit_port = port
-        self._baudrate = baudrate
-        self._timeout = timeout
+        self._baudrate = config["serial"]["baudrate"] if baudrate is None else baudrate
+        self._timeout = config["serial"]["timeout"] if timeout is None else timeout
         self._auto_start_queue = auto_start_queue
         self._only_known_adapters = only_known_adapters
         self._via_broker = via_broker
-        self._broker_host = broker_host
-        self._broker_port = broker_port
+        self._broker_host = config["broker"]["host"] if broker_host is None else broker_host
+        self._broker_port = config["broker"]["port"] if broker_port is None else broker_port
+        self._verbose = verbose
         self._transport: SerialTransport | BrokerTransport | None = None
         self._batch_state = BatchState()
         self._last_queued_index: int = 0
@@ -229,7 +225,33 @@ class Magician:
         If a :class:`pydobotlab.broker.DobotBroker` is reachable on localhost
         (the panel runs one), route through it instead of opening the serial
         port directly. Override with ``via_broker=False``.
+
+        Prints one line saying which port connected, or why it failed (the
+        exception is still raised). Pass ``verbose=False`` to the constructor
+        to silence it.
+
+        Nothing is left locked if the program ends without :meth:`disconnect`:
+        the OS releases the port when the process exits.
         """
+        was_open = self.is_open
+        try:
+            self._open_connection()
+        except Exception as error:
+            self._announce(f"Failed to connect: {error}", failed=True)
+            raise
+        if not was_open:
+            route = (
+                " (shared through the panel)"
+                if isinstance(self._transport, BrokerTransport)
+                else ""
+            )
+            self._announce(f"Connected to {self.port}{route}.")
+
+    def _announce(self, message: str, *, failed: bool = False) -> None:
+        if self._verbose:
+            print(f"[pydobotlab] {message}", file=sys.stderr if failed else sys.stdout, flush=True)
+
+    def _open_connection(self) -> None:
         if self._transport is None:
             from .broker import is_broker_reachable, list_broker_ports
 
@@ -261,11 +283,7 @@ class Magician:
                 if port is None:
                     port = find_free_port(only_known_adapters=self._only_known_adapters)
                 if port is None:
-                    raise DobotConnectionError(
-                        "Dobot() with no explicit port could not auto-pick: "
-                        "no free Dobot answered a probe on any enumerated "
-                        "serial port"
-                    )
+                    raise no_dobot_found_error(only_known_adapters=self._only_known_adapters)
 
             if use_broker:
                 self._transport = BrokerTransport(
@@ -295,8 +313,11 @@ class Magician:
         self.stop_pose_stream()
         if self._transport is not None:
             try:
-                if self._transport.is_open:
-                    self.stop_queue()
+                if self._transport.is_open and self._auto_start_queue:
+                    # Drop commands this program left behind and leave the
+                    # queue running for the panel or the next program.
+                    self.clear_queue()
+                    self.start_queue()
             except Exception:
                 pass
             self._transport.close()
@@ -359,41 +380,55 @@ class Magician:
         """Read a command response without adding to the firmware queue."""
         return self.send_command(command_id, params, write=False, queued=False)
 
+    def execute_command(self, command_id: int, params: bytes = b"") -> bool:
+        """Queue a write and wait until the arm has executed it.
+
+        Inside :meth:`batch` the command is only queued. Raises a
+        :class:`~pydobotlab.errors.DobotAlarmError` subclass if the arm
+        reports an alarm.
+        """
+        index = self.queue_command(command_id, params)
+        if self._batch_state.depth == 0:
+            self.wait_for(index)
+        return True
+
     # ==================================================================
     # OFFICIAL DobotLab API (sections 3.6.1 - 3.6.28)
-    # Preserve official names and arguments; some methods add optional controls.
+    # Official names and arguments. Setters return True once the arm has
+    # executed the command, as in DobotLab, and raise on an arm alarm.
     # ==================================================================
 
     # ---- 3.6.1  Point-to-point Movement -------------------------------
-    def ptp(self, mode: int, x: float, y: float, z: float, r: float) -> int:
-        """Move to ``(x, y, z, r)`` in PTP ``mode`` (0..9). Queues a move."""
+    def ptp(self, mode: int, x: float, y: float, z: float, r: float) -> bool:
+        """Move to ``(x, y, z, r)`` in PTP ``mode`` (0..9) and wait until the move ends."""
         params = bytes((int(mode),)) + pack_floats(x, y, z, r)
-        return self.queue_command(CommandID.SET_PTP_CMD, params)
+        return self.execute_command(CommandID.SET_PTP_CMD, params)
 
     # ---- 3.6.2  Set Slideway State and Version ------------------------
-    def set_device_withl(self, enable: bool, version: int = 0) -> None:
+    def set_device_withl(self, enable: bool, version: int = 0) -> bool:
         """Enable/disable the slideway and declare its hardware version (0=V1, 1=V2)."""
         self.write_command(
             CommandID.GET_SET_DEVICE_WITH_L,
             pack_u8(1 if enable else 0, int(version)),
         )
+        return True
 
     # ---- 3.6.3  Set Speed of Slideway ---------------------------------
-    def set_ptpl_params(self, vel: float, accel: float) -> int:
+    def set_ptpl_params(self, vel: float, accel: float) -> bool:
         """Slideway max velocity / acceleration (each as a percentage 1..100)."""
-        return self.queue_command(
+        return self.execute_command(
             CommandID.GET_SET_PTP_L_PARAMS,
             pack_floats(vel, accel),
         )
 
     # ---- 3.6.4  PTP with Slideway -------------------------------------
-    def set_ptpwithl_cmd(self, mode: int, x: float, y: float, z: float, r: float, l: float) -> int:
+    def set_ptpwithl_cmd(self, mode: int, x: float, y: float, z: float, r: float, l: float) -> bool:
         """PTP move that also drives the slideway to ``l`` (mm)."""
         params = bytes((int(mode),)) + pack_floats(x, y, z, r, l)
-        return self.queue_command(CommandID.SET_PTP_WITH_L_CMD, params)
+        return self.execute_command(CommandID.SET_PTP_WITH_L_CMD, params)
 
     # ---- 3.6.5  Set R-axis Angle --------------------------------------
-    def set_r(self, r: float) -> int:
+    def set_r(self, r: float) -> bool:
         """Rotate the R axis to ``r`` (degrees) without moving X/Y/Z."""
         pose = self.get_pose()
         return self.ptp(PTPMode.MOVJ_XYZ, pose.x, pose.y, pose.z, r)
@@ -412,7 +447,7 @@ class Magician:
     @motion_params.setter
     def motion_params(self, value: tuple[float, float]) -> None:
         vel, acc = value
-        self.queue_command(
+        self.execute_command(
             CommandID.GET_SET_PTP_COMMON_PARAMS,
             pack_floats(float(vel), float(acc)),
         )
@@ -433,34 +468,34 @@ class Magician:
     def jump_params(self, value: tuple[float, float]) -> None:
         zlimit, height = value
         # Wire order is (jumpHeight, zLimit) - flip back.
-        self.queue_command(
+        self.execute_command(
             CommandID.GET_SET_PTP_JUMP_PARAMS,
             pack_floats(float(height), float(zlimit)),
         )
 
     # ---- 3.6.8  Set Mode of IO Port -----------------------------------
-    def set_multiplexing(self, io, multiplex: int) -> int:
+    def set_multiplexing(self, io, multiplex: int) -> bool:
         """Configure ``io`` (e.g. ``"DO_01"``) as DO/PWM/DI/ADC/PullUp/PullDn."""
         port = parse_io_port(io)
-        return self.queue_command(
+        return self.execute_command(
             CommandID.GET_SET_IO_MULTIPLEXING,
             pack_u8(port, int(multiplex)),
         )
 
     # ---- 3.6.9  Set Frequency and Duty Cycle of PWM Output Port ------
-    def set_pwm(self, io, freq: float, cycle: float) -> int:
+    def set_pwm(self, io, freq: float, cycle: float) -> bool:
         """Set PWM frequency (Hz, 10..1MHz) and duty cycle (0..100 %) on ``io``."""
         port = parse_io_port(io)
-        return self.queue_command(
+        return self.execute_command(
             CommandID.GET_SET_IO_PWM,
             pack_u8(port) + pack_floats(float(freq), float(cycle)),
         )
 
     # ---- 3.6.10  Set Digital Output Port -----------------------------
-    def set_do(self, io, level: int) -> int:
+    def set_do(self, io, level: int) -> bool:
         """Drive digital output ``io`` (e.g. ``"DO_01"``) low (0) or high (1)."""
         port = parse_io_port(io)
-        return self.queue_command(
+        return self.execute_command(
             CommandID.GET_SET_IO_DO,
             pack_u8(port, 1 if int(level) else 0),
         )
@@ -480,28 +515,28 @@ class Magician:
         return struct.unpack("<H", frame.params[1:3])[0]
 
     # ---- 3.6.13  Set End Suction Cup ----------------------------------
-    def set_endeffector_suctioncup(self, enable: bool, on: bool) -> int:
+    def set_endeffector_suctioncup(self, enable: bool, on: bool) -> bool:
         """Suction-cup state.
 
         ``enable`` arms the pump; ``on`` selects suck (True) vs release (False).
         """
-        return self.queue_command(
+        return self.execute_command(
             CommandID.GET_SET_END_EFFECTOR_SUCTION_CUP,
             pack_u8(1 if enable else 0, 1 if on else 0),
         )
 
     # ---- 3.6.14  Set End Gripper --------------------------------------
-    def set_endeffector_gripper(self, enable: bool, on: bool) -> int:
+    def set_endeffector_gripper(self, enable: bool, on: bool) -> bool:
         """Gripper state. ``on=True`` grips; ``on=False`` releases."""
-        return self.queue_command(
+        return self.execute_command(
             CommandID.GET_SET_END_EFFECTOR_GRIPPER,
             pack_u8(1 if enable else 0, 1 if on else 0),
         )
 
     # ---- 3.6.15  Set Photoelectric Sensor -----------------------------
-    def set_infrared_sensor(self, port: int, enable: bool, version: int = 1) -> int:
+    def set_infrared_sensor(self, port: int, enable: bool, version: int = 1) -> bool:
         """Configure an IR / photoelectric sensor on GP1/GP2/GP4/GP5."""
-        return self.queue_command(
+        return self.execute_command(
             CommandID.GET_SET_INFRARED_SENSOR,
             pack_u8(1 if enable else 0, int(port), int(version)),
         )
@@ -513,9 +548,9 @@ class Magician:
         return int(frame.params[0])
 
     # ---- 3.6.17  Set Color Sensor -------------------------------------
-    def set_color_sensor(self, port: int, enable: bool, version: int = 0) -> int:
+    def set_color_sensor(self, port: int, enable: bool, version: int = 0) -> bool:
         """Configure the colour sensor on GP1 through GP6."""
-        return self.queue_command(
+        return self.execute_command(
             CommandID.GET_SET_COLOR_SENSOR,
             pack_u8(1 if enable else 0, int(port), int(version)),
         )
@@ -527,28 +562,15 @@ class Magician:
         return int(frame.params[0]), int(frame.params[1]), int(frame.params[2])
 
     # ---- 3.6.19  Wait N Seconds ---------------------------------------
-    def wait(self, second: float) -> int:
-        """Insert a pause of ``second`` seconds into the firmware queue."""
-        ms = max(0, int(round(float(second) * 1000)))
-        return self.queue_command(CommandID.SET_WAIT_CMD, pack_u32(ms))
+    def wait(self, second: float) -> bool:
+        """Pause the arm for ``second`` seconds."""
+        milliseconds = max(0, int(round(float(second) * 1000)))
+        return self.execute_command(CommandID.SET_WAIT_CMD, pack_u32(milliseconds))
 
     # ---- 3.6.20  Set Home ---------------------------------------------
-    def set_home(
-        self,
-        *,
-        wait: bool = True,
-        timeout: float | None = 60.0,
-        raise_on_alarm: bool = True,
-    ) -> int:
-        """Move the arm to its home position. Blocks until done unless ``wait=False``.
-
-        If a motion-failure alarm fires (typically only if home itself is
-        unreachable from the current pose), raises :class:`DobotKinematicError`.
-        """
-        index = self.queue_command(CommandID.SET_HOME_CMD, pack_u32(0))
-        if wait:
-            self.wait_for(index, timeout=timeout, raise_on_alarm=raise_on_alarm)
-        return index
+    def set_home(self) -> bool:
+        """Move the arm to its home position and wait until it arrives."""
+        return self.execute_command(CommandID.SET_HOME_CMD, pack_u32(0))
 
     # ---- 3.6.21  Get Current Pose -------------------------------------
     def get_pose(self) -> Pose:
@@ -564,37 +586,23 @@ class Magician:
         return unpack_floats(frame.params[:4])[0]
 
     # ---- 3.6.23  Clear Alarm ------------------------------------------
-    def clear_alarm(self, *, verify: bool = False, settle: float = 0.15) -> None:
-        """Clear all active alarms.
+    def clear_alarm(self) -> bool:
+        """Clear all active alarms and confirm that none comes back.
 
-        When ``verify=True``, re-reads the alarm bitmask after a brief
-        settle delay and raises :class:`DobotAlarmError` if any motion
-        alarm is *still* set - the firmware honoured the clear, but the
-        underlying physical condition (joint still mashed against a limit,
-        sensor still faulting, etc.) reasserted it immediately. The
-        operator needs to fix the *physical* condition first (jog away from
-        the limit, re-home, ...).
+        If the cause of an alarm is still present (for example a joint
+        against its limit), the arm raises the alarm again at once; the
+        alarm stays active and its exception is raised.
         """
         self.write_command(CommandID.CLEAR_ALL_ALARMS_STATE)
-        if not verify:
-            return
-        time.sleep(settle)
+        time.sleep(CLEAR_ALARM_SETTLE_SECONDS)
         active = self.get_alarms()
-        # Only motion-related bits count as "physical condition still active".
-        persistent = [
-            (int(a), name, line)
-            for a, name, line in zip(active.alarms, active.names(), active.format(), strict=True)
-            if 0x10 <= int(a) <= 0x77
-        ]
-        if persistent:
-            lines = [line for _, _, line in persistent]
-            raise DobotAlarmError(
-                alarms=[name for _, name, _ in persistent],
-                message=(
-                    "alarm reasserted itself after clear - the physical "
-                    "condition is still active:\n  - " + "\n  - ".join(lines)
-                ),
+        if active:
+            raise alarm_error(
+                active,
+                "The alarm is still active after clear_alarm()",
+                "Remove its cause first, then clear it again.",
             )
+        return True
 
     # ---- 3.6.24  Get Speed of Arm -------------------------------------
     def get_arm_speed_ratio(self, mode: int) -> float:
@@ -625,17 +633,18 @@ class Magician:
         return (float(v), float(a))
 
     # ---- 3.6.25  Set Lost-step Threshold ------------------------------
-    def set_lost_step_params(self, value: float) -> None:
+    def set_lost_step_params(self, value: float) -> bool:
         """Lost-step alarm threshold; firing it raises a LOST_STEP_* alarm."""
         self.write_command(
             CommandID.GET_SET_LOST_STEP_PARAMS,
             pack_floats(float(value)),
         )
+        return True
 
     # ---- 3.6.26  Perform Lost-step Detection --------------------------
-    def set_lost_step_cmd(self) -> int:
-        """Trigger a lost-step detection pass."""
-        return self.queue_command(CommandID.SET_LOST_STEP_CMD, b"")
+    def set_lost_step_cmd(self) -> bool:
+        """Run a lost-step detection pass."""
+        return self.execute_command(CommandID.SET_LOST_STEP_CMD, b"")
 
     # ---- 3.6.27  Check Lost-step Results ------------------------------
     def get_lost_step_result(self) -> list[str]:
@@ -643,7 +652,7 @@ class Magician:
         return self.get_alarms().names()
 
     # ---- 3.6.28  Set Speed of Conveyor and Move -----------------------
-    def set_converyor(self, index: int, enable: bool, speed: float) -> int:
+    def set_converyor(self, index: int, enable: bool, speed: float) -> bool:
         """Drive a stepper-conveyor.
 
         Note: the official function name has a typo (``set_converyor`` rather
@@ -656,7 +665,7 @@ class Magician:
         params = pack_u8(int(index), 1 if enable else 0) + struct.pack(
             "<i", int(round(float(speed)))
         )
-        return self.queue_command(CommandID.SET_E_MOTOR, params)
+        return self.execute_command(CommandID.SET_E_MOTOR, params)
 
     # Sane-name alias for the official typo.
     set_conveyor = set_converyor
@@ -668,9 +677,9 @@ class Magician:
     # ==================================================================
 
     # ---- Additional end-effector command -----------------------------
-    def set_endeffector_laser(self, enable: bool, on: bool) -> int:
-        """Enable the laser driver and set its output; return the queue index."""
-        return self.queue_command(
+    def set_endeffector_laser(self, enable: bool, on: bool) -> bool:
+        """Enable the laser driver and set its output, like the other end effectors."""
+        return self.execute_command(
             CommandID.GET_SET_END_EFFECTOR_LASER, pack_u8(int(enable), int(on))
         )
 
@@ -769,10 +778,10 @@ class Magician:
         return decode_alarms(frame.params)
 
     def ensure_no_alarms(self) -> None:
-        """Raise :class:`DobotAlarmError` if any alarm is currently active."""
-        alarms = self.get_alarms()
-        if alarms:
-            raise DobotAlarmError(alarms.names())
+        """Raise the exception for the active alarms, if any."""
+        active = self.get_alarms()
+        if active:
+            raise alarm_error(active, "The arm reported an alarm", ALARM_REMEDY)
 
     # ---- Convenience: blocking move_to() that waits for queue ---------
     def move_to(
@@ -793,7 +802,8 @@ class Magician:
         the arm's reachable workspace - :class:`DobotKinematicError` is
         raised. To retry, call :meth:`clear_alarm` first.
         """
-        index = self.ptp(int(mode), x, y, z, r)
+        params = bytes((int(mode),)) + pack_floats(x, y, z, r)
+        index = self.queue_command(CommandID.SET_PTP_CMD, params)
         if wait:
             self.wait_for(index, timeout=timeout, raise_on_alarm=raise_on_alarm)
         return index
@@ -811,16 +821,14 @@ class Magician:
         return self.write_command(CommandID.SET_JOG_CMD, pack_u8(int(mode), int(cmd)))
 
     def jog_stop(self) -> None:
-        """Stop any active JOG. Best-effort: retries once on transport error
-        because a stuck jog is a safety hazard."""
+        """Stop any active JOG. Retries once on transport error because a
+        stuck jog is a safety hazard; if the retry also fails the error is
+        raised, since the arm may still be moving."""
         try:
             self.jog(JOGCmd.IDLE)
         except (DobotConnectionError, DobotTimeoutError):
             # One retry - the arm is still moving and we MUST stop it.
-            try:
-                self.jog(JOGCmd.IDLE)
-            except Exception:
-                pass
+            self.jog(JOGCmd.IDLE)
 
     # ---- Queue control ------------------------------------------------
     def start_queue(self) -> None:
@@ -856,39 +864,22 @@ class Magician:
         """Block until the firmware queue has executed up through ``index``.
 
         ``raise_on_alarm`` (default ``True``): while waiting, also check
-        :meth:`get_alarms`. If any motion-failure alarm bit fires
-        (workspace / IK / joint-limit / singularity), raise
-        :class:`DobotKinematicError` immediately instead of waiting forever
-        for a command the firmware has refused to plan.
+        :meth:`get_alarms`. The arm does not run its queue while an alarm
+        is active, so any alarm raises its exception at once. Commands
+        still queued are discarded, so clearing the alarm does not resume
+        them.
         """
         deadline = time.monotonic() + timeout if timeout is not None else None
         while True:
             current = self.queued_cmd_current_index()
             if raise_on_alarm:
                 active = self.get_alarms()
-                # Any alarm bit in the motion-related byte ranges (planning,
-                # kinematic, over-speed, joint-limit, lost-step, other -
-                # codes 0x10..0x77) means the firmware refused or aborted a
-                # motion. Includes named codes AND unmapped bits in those
-                # bands so an unknown joint-limit on a firmware variant
-                # still surfaces as a DobotKinematicError.
-                bad = [
-                    (int(a), name, line)
-                    for a, name, line in zip(
-                        active.alarms, active.names(), active.format(), strict=True
-                    )
-                    if 0x10 <= int(a) <= 0x77
-                ]
-                if bad:
-                    motion_alarm_names = [name for _, name, _ in bad]
-                    bad_lines = [line for _, _, line in bad]
-                    message = (
-                        "motion failed:\n  - "
-                        + "\n  - ".join(bad_lines)
-                        + "\nRecover by calling clear_alarm() (or set_home() "
-                        "if you want to also re-zero the arm) before retrying."
-                    )
-                    raise DobotKinematicError(alarms=motion_alarm_names, message=message)
+                if active:
+                    try:
+                        self.clear_queue()
+                    except DobotError:
+                        pass  # the alarm is the error to report
+                    raise alarm_error(active, "The arm reported an alarm", ALARM_REMEDY)
             if current >= index:
                 return
             if deadline is not None and time.monotonic() >= deadline:
@@ -911,9 +902,10 @@ class Magician:
 
     def batch(self):
         """Lazy run: pause the firmware queue, accumulate moves inside the
-        block, resume execution on exit. DobotLab itself doesn't expose
-        this idiom; it lets you queue an entire drawing first, then run it
-        as a single continuous program at full motion-planning speed."""
+        block, then run them on exit and wait until they finish. DobotLab
+        itself doesn't expose this idiom; it lets you queue an entire
+        drawing first, then run it as a single continuous program at full
+        motion-planning speed."""
         return batch_context(self)
 
     # ---- Real-time pose stream ----------------------------------------
@@ -922,7 +914,16 @@ class Magician:
         callback: Callable[[Pose], None] | Queue | None = None,
         *,
         hz: float = 50.0,
+        on_error: Callable[[Exception], None] | None = None,
     ) -> Queue:
+        """Stream poses at ``hz`` from a background thread.
+
+        If reading a pose (or your ``callback``) raises, the failure is
+        reported once per streak - to ``on_error(error)`` if given, otherwise
+        as a ``[pydobotlab]`` line on stderr - and the stream keeps trying.
+        Without ``on_error`` a ``Pose stream recovered.`` line follows when it
+        works again.
+        """
         if self._pose_stream_thread is not None and self._pose_stream_thread.is_alive():
             raise RuntimeError("pose stream already running")
         if callback is None:
@@ -939,11 +940,22 @@ class Magician:
 
         def stream_poses() -> None:
             next_sample_time = time.monotonic()
+            failing = False
             while not stop.is_set():
                 try:
                     push(self.get_pose())
-                except Exception:
-                    pass
+                except Exception as error:
+                    if not failing:
+                        failing = True
+                        if on_error is not None:
+                            on_error(error)
+                        else:
+                            self._announce(f"Pose stream failing: {error}", failed=True)
+                else:
+                    if failing:
+                        failing = False
+                        if on_error is None:
+                            self._announce("Pose stream recovered.")
                 next_sample_time += period
                 sleep_seconds = next_sample_time - time.monotonic()
                 if sleep_seconds > 0:
@@ -992,15 +1004,15 @@ class Magician:
     # a future major release.
     # ==================================================================
 
-    def home(self, **kwargs):
+    def home(self) -> bool:
         """Deprecated alias for :meth:`set_home`."""
-        return self.set_home(**kwargs)
+        return self.set_home()
 
-    def clear_alarms(self) -> None:
+    def clear_alarms(self) -> bool:
         """Deprecated alias for :meth:`clear_alarm`."""
-        self.clear_alarm()
+        return self.clear_alarm()
 
-    def wait_seconds(self, seconds: float) -> int:
+    def wait_seconds(self, seconds: float) -> bool:
         """Deprecated alias for :meth:`wait`."""
         return self.wait(seconds)
 

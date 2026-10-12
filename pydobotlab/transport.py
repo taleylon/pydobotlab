@@ -10,18 +10,25 @@ same machine are completely independent.
 
 from __future__ import annotations
 
+import atexit
+import errno
+import os
 import socket
 import threading
+import weakref
 
 import serial
 
 from .broker_protocol import receive_exactly, receive_frame_bytes, send_frame_bytes
-from .errors import DobotConnectionError, DobotPortInUseError, DobotTimeoutError
+from .config import get_config
+from .errors import (
+    DobotConnectionError,
+    DobotPermissionError,
+    DobotPortInUseError,
+    DobotTimeoutError,
+)
+from .permissions import diagnose_port_permission
 from .protocol import Frame, pack, read_frame, unpack
-
-DEFAULT_BAUDRATE = 115200
-DEFAULT_TIMEOUT_S = 1.0
-
 
 # ---------------------------------------------------------------------------
 # Process-local port registry
@@ -35,6 +42,50 @@ DEFAULT_TIMEOUT_S = 1.0
 
 _REGISTRY_LOCK = threading.Lock()
 _OPEN_PORTS: set[str] = set()
+
+# Close transports explicitly at interpreter exit for scripts that omit ``disconnect()``,
+# rather than relying on garbage collection, even though the OS releases per-process handles and locks when the process ends.
+_OPEN_TRANSPORTS: weakref.WeakSet[SerialTransport] = weakref.WeakSet()
+
+
+def close_open_transports() -> None:
+    """Close every serial transport this process still holds open."""
+    for transport in list(_OPEN_TRANSPORTS):
+        transport.close()
+
+
+# Register the cleanup function to run at exit, ensuring that all open transports are closed properly when the program terminates.
+atexit.register(close_open_transports)
+
+
+def classify_open_error(
+    port: str, error: serial.SerialException, *, posix: bool = os.name == "posix"
+) -> DobotConnectionError:
+    """Turn a pyserial open failure into the exception that names the real cause.
+
+    Permission problems are *confirmed* against the device node first
+    (:func:`~pydobotlab.permissions.diagnose_port_permission`) so a missing
+    ``dialout`` membership is never reported as a busy port. Only then do
+    lock / "access denied" failures count as busy.
+    """
+    problem = diagnose_port_permission(port)
+    if problem is not None:
+        return DobotPermissionError(problem.message)
+
+    error_number = getattr(error, "errno", None)
+    message = str(error).lower()
+    is_busy = "could not exclusively lock" in message
+    if posix:
+        if error_number in (errno.EACCES, errno.EPERM):
+            # Access check passed but the OS still refused: not busy either.
+            return DobotPermissionError(f"permission denied opening {port!r}: {error}")
+        is_busy = is_busy or error_number in (errno.EBUSY, errno.EAGAIN)
+    else:
+        # Windows reports a COM port held by another program as "Access is denied".
+        is_busy = is_busy or "access is denied" in message or "permissionerror" in message
+    if is_busy:
+        return DobotPortInUseError(f"port {port!r} is busy")
+    return DobotConnectionError(f"cannot open {port!r}: {error}")
 
 
 def is_port_claimed(port: str) -> bool:
@@ -61,11 +112,11 @@ class SerialTransport:
     port:
         OS-specific serial device path (``/dev/ttyUSB0``, ``COM3``...).
     baudrate:
-        Defaults to 115200 - the only baud rate the Magician firmware speaks.
+        Defaults to the configured value.
     timeout:
-        Per-byte read timeout, in seconds. Frame-level reads accumulate bytes
-        and surface a :class:`DobotTimeoutError` if a full frame doesn't
-        arrive in time.
+        Per-byte read timeout, in seconds; defaults to the configured value.
+        Frame-level reads accumulate bytes and surface a
+        :class:`DobotTimeoutError` if a full frame doesn't arrive in time.
     exclusive:
         On Linux, request an exclusive lock on the port (``flock``) so a
         second :class:`Dobot` instance can't accidentally grab the same arm.
@@ -74,14 +125,15 @@ class SerialTransport:
     def __init__(
         self,
         port: str,
-        baudrate: int = DEFAULT_BAUDRATE,
-        timeout: float = DEFAULT_TIMEOUT_S,
+        baudrate: int | None = None,
+        timeout: float | None = None,
         *,
         exclusive: bool = True,
     ) -> None:
+        settings = get_config()["serial"]
         self.port = port
-        self.baudrate = baudrate
-        self.timeout = timeout
+        self.baudrate = settings["baudrate"] if baudrate is None else baudrate
+        self.timeout = settings["timeout"] if timeout is None else timeout
         self._exclusive = exclusive
         self._serial: serial.Serial | None = None
         self._lock = threading.Lock()
@@ -95,8 +147,7 @@ class SerialTransport:
         with _REGISTRY_LOCK:
             if self.port in _OPEN_PORTS:
                 raise DobotPortInUseError(
-                    f"port {self.port!r} is already in use by another Dobot "
-                    f"instance in this process"
+                    f"port {self.port!r} is busy (already open in this program)"
                 )
             _OPEN_PORTS.add(self.port)
         # 2. Open the underlying device.
@@ -129,6 +180,7 @@ class SerialTransport:
             self._serial = serial_port
             self._serial.reset_input_buffer()
             self._serial.reset_output_buffer()
+            _OPEN_TRANSPORTS.add(self)
         except serial.SerialException as error:
             if serial_port is not None:
                 try:
@@ -138,16 +190,7 @@ class SerialTransport:
             self._serial = None
             with _REGISTRY_LOCK:
                 _OPEN_PORTS.discard(self.port)
-            message = str(error).lower()
-            if (
-                "could not exclusively lock" in message
-                or "permission denied" in message
-                or "device or resource busy" in message
-            ):
-                raise DobotPortInUseError(
-                    f"port {self.port!r} is already in use by another process: {error}"
-                ) from error
-            raise DobotConnectionError(f"cannot open {self.port!r}: {error}") from error
+            raise classify_open_error(self.port, error) from error
         except Exception:
             if serial_port is not None:
                 try:
@@ -167,6 +210,7 @@ class SerialTransport:
                 except serial.SerialException:
                     pass
             self._serial = None
+        _OPEN_TRANSPORTS.discard(self)
         with _REGISTRY_LOCK:
             _OPEN_PORTS.discard(self.port)
 
@@ -184,6 +228,10 @@ class SerialTransport:
 
         with self._lock:
             try:
+                # Strictly request/response: any byte still waiting is a late
+                # answer to an earlier, timed-out request. Discard it so it
+                # can't be mistaken for the reply to this one.
+                self._serial.reset_input_buffer()
                 self._serial.write(frame_bytes)
                 self._serial.flush()
             except serial.SerialTimeoutException as error:
@@ -224,17 +272,20 @@ class BrokerTransport:
     def __init__(
         self,
         port: str,
-        baudrate: int = 115200,  # accepted for shape; ignored
-        timeout: float = 1.0,
+        baudrate: int | None = None,  # accepted for shape; ignored
+        timeout: float | None = None,
         *,
-        broker_host: str = "127.0.0.1",
-        broker_port: int = 8765,
+        broker_host: str | None = None,
+        broker_port: int | None = None,
     ) -> None:
+        config = get_config()
+        serial_settings = config["serial"]
+        self._broker_settings = config["broker"]
         self.port = port
-        self.baudrate = baudrate
-        self.timeout = timeout
-        self._broker_host = broker_host
-        self._broker_port = broker_port
+        self.baudrate = serial_settings["baudrate"] if baudrate is None else baudrate
+        self.timeout = serial_settings["timeout"] if timeout is None else timeout
+        self._broker_host = self._broker_settings["host"] if broker_host is None else broker_host
+        self._broker_port = self._broker_settings["port"] if broker_port is None else broker_port
         self._socket: socket.socket | None = None
         self._lock = threading.Lock()
 
@@ -248,17 +299,22 @@ class BrokerTransport:
             raise ValueError("broker port name must contain 1..255 ASCII bytes")
         connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
-            connection.settimeout(2.0)
+            connection.settimeout(self._broker_settings["connect_timeout"])
             connection.connect((self._broker_host, self._broker_port))
             connection.sendall(bytes((0x01, len(port_bytes))) + port_bytes)
             reply = receive_exactly(connection, 1)[0]
             if reply == 0x01:
                 raise DobotConnectionError(f"broker could not open transport for {self.port!r}")
             if reply == 0x02:
-                raise DobotPortInUseError(f"broker reports {self.port!r} is busy")
+                raise DobotPortInUseError(f"port {self.port!r} is busy")
+            if reply == 0x04:
+                problem = diagnose_port_permission(self.port)
+                raise DobotPermissionError(
+                    problem.message if problem else f"permission denied opening {self.port!r}"
+                )
             if reply != 0x00:
                 raise DobotConnectionError(f"broker handshake failed (reply 0x{reply:02x})")
-            connection.settimeout(self.timeout + 5.0)
+            connection.settimeout(self.timeout + self._broker_settings["reply_margin"])
         except OSError as error:
             connection.close()
             raise DobotConnectionError(
@@ -271,16 +327,20 @@ class BrokerTransport:
 
     def close(self) -> None:
         with self._lock:
-            if self._socket is not None:
-                try:
-                    self._socket.shutdown(socket.SHUT_RDWR)
-                except OSError:
-                    pass
-                try:
-                    self._socket.close()
-                except OSError:
-                    pass
-                self._socket = None
+            self._drop_socket()
+
+    def _drop_socket(self) -> None:
+        """Close the broker connection. The caller must hold ``self._lock``."""
+        if self._socket is not None:
+            try:
+                self._socket.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            try:
+                self._socket.close()
+            except OSError:
+                pass
+            self._socket = None
 
     @property
     def is_open(self) -> bool:
@@ -295,8 +355,13 @@ class BrokerTransport:
                 raise DobotConnectionError(f"broker transport for {self.port!r} is not open")
             try:
                 send_frame_bytes(self._socket, frame_bytes)
-                response = receive_frame_bytes(self._socket)
+                response = receive_frame_bytes(self._socket, allow_error_reply=True)
             except TimeoutError as error:
+                # The broker's answer may still arrive later and would be
+                # taken for the reply to the *next* request, so drop the link:
+                # the failure stays visible instead of turning into a
+                # mismatched response.
+                self._drop_socket()
                 raise DobotTimeoutError(f"broker timeout on {self.port!r}") from error
             except OSError as error:
                 raise DobotConnectionError(f"broker I/O on {self.port!r}: {error}") from error

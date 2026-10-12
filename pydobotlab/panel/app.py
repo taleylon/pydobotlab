@@ -1,7 +1,7 @@
 """Entry point for the pydobotlab control-panel GUI.
 
-Exposed as the ``pydobotlab-panel`` console script (added by
-``pip install pydobotlab[gui]``) and as ``python -m pydobotlab.panel``.
+Enables the option to run it through the ``pydobotlab-panel`` console script after installing
+``pip install pydobotlab[gui]``, or with ``python -m pydobotlab.panel``.
 
 Simulator mode
 --------------
@@ -9,11 +9,10 @@ Simulator mode
     pydobotlab-panel --simulator                  # 2 fake arms, no hardware needed
     pydobotlab-panel --simulator --simulator-arms 4
 
-Useful for inspecting / debugging the panel UI when no real Dobot is
-connected, or for writing tutorials offline. The simulator monkey-patches
-the serial backend; everything else (broker, hub, control panel, jog,
-home, pose stream, end-effector tabs) runs unmodified against fake arms
-that interpolate motion at ~30 Hz so the pose readout actually animates.
+Simulator mode allows you to inspect or debug the panel without a physical
+Dobot device connected. It replaces the serial backend while
+keeping the broker, hub, control panel, jog, home, pose-stream, and
+end-effector tabs unchanged. Simulated arms move at 30 Hz, allowing continuous pose-stream.
 """
 
 from __future__ import annotations
@@ -45,7 +44,7 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--simulator-arms",
         type=int,
-        default=2,
+        default=None,
         metavar="N",
         help="In simulator mode, how many fake arms to expose (default 2).",
     )
@@ -60,7 +59,10 @@ def main(argv: list[str] | None = None) -> int:
         # Patch serial backend BEFORE any serial-touching imports happen.
         from ..simulator import install_simulator
 
-        simulated_ports = install_simulator(arms=max(1, arguments.simulator_arms))
+        requested_arms = arguments.simulator_arms
+        simulated_ports = install_simulator(
+            arms=None if requested_arms is None else max(1, requested_arms)
+        )
         print(
             f"[simulator] {len(simulated_ports)} fake arm(s): {', '.join(simulated_ports)}",
             file=sys.stderr,

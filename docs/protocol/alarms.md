@@ -1,62 +1,55 @@
 # Alarm bitmask
 
-`GET_ALARMS_STATE` (cmd 20, read) returns 16 raw bytes - a 128-bit alarm bitmask. Each bit is a named alarm code from `0x00` to `0x7F`. pydobotlab decodes this into an [`AlarmSet`](../api/alarms.md#alarmset).
+`GET_ALARMS_STATE` (ID 20, get) returns a 16-byte (128-bit) bitmask. Each bit is an alarm code from `0x00` to `0x7F`. [`get_alarms`](../api/alarms.md#get_alarms) decodes the mask into an [`AlarmSet`](../api/alarms.md#alarmset).
 
 ## Bit layout
 
 ```
-bit position  =  byte_index * 8 + bit_within_byte
-                 ─────────       ────────────────
-                 raw[0..15]      bit_within_byte = code & 0x07
-                                 byte_index      = code >> 3
+byte_index = code >> 3
+bit_index  = code & 0x07
 ```
 
-So alarm `0x42` (LIMIT_POS_J3) lives in `raw[8]`, bit 2 (i.e. `raw[8] & 0x04`).
+Alarm `0x42` (`LIMIT_POS_J3`) is `raw[8] & 0x04`.
 
 ## Code ranges
 
-| Range          | Category        | Comments |
-|----------------|-----------------|----------|
-| `0x00..0x07`   | System / Public | Reset, MCU comms, file system, sensor read errors. |
-| `0x10..0x17`   | Plan            | IK / planner failures. |
-| `0x20..0x27`   | Kinematic       | Singularities, workspace, IK joint-limit. |
-| `0x30..0x37`   | Overspeed       | Per-joint overspeed (`OVERSPEED_J1..J4`). |
-| `0x40..0x47`   | Joint limit, positive | Per-joint hard positive limit. |
-| `0x50..0x57`   | Joint limit, negative | Per-joint hard negative limit. |
-| `0x60..0x67`   | Lost step       | Per-joint lost-step detection result. |
-| `0x70..0x77`   | Other           | Auto-leveling switch, etc. |
+| Range | Category | Description |
+|---|---|---|
+| `0x00` to `0x07` | System | Reset, MCU communication, file system, sensor read errors. |
+| `0x10` to `0x17` | Planning | Inverse-kinematics and planner failures. |
+| `0x20` to `0x27` | Kinematics | Singularities, workspace, joint limits in inverse kinematics. |
+| `0x30` to `0x37` | Overspeed | Per-joint overspeed. |
+| `0x40` to `0x47` | Positive joint limit | Per-joint positive limit. |
+| `0x50` to `0x57` | Negative joint limit | Per-joint negative limit. |
+| `0x60` to `0x67` | Lost step | Per-joint lost-step result. |
+| `0x70` to `0x77` | Other | Auto-leveling switch. |
 
-A complete enumeration of named codes is on the [Alarms](../api/alarms.md#alarm-codes) API page.
+The named codes are listed under [`Alarm`](../api/alarms.md#alarm).
 
-## Why pydobotlab raises on motion alarms
+## Exceptions
 
-Codes `0x10..0x77` (i.e. plan / kinematic / overspeed / joint-limit / lost-step / other) are **motion-related**. When any of these fire while a motion is pending, pydobotlab raises [`DobotKinematicError`](../api/errors.md#dobotkinematicerror-extends-dobotalarmerror) from the waiters ([`move_to`](../api/motion.md#move-to), [`set_home`](../api/motion.md#set_home-waittrue-timeout600-raise_on_alarmtrue-int), [`wait_for`](../api/queue.md#wait_forindex-timeoutnone-poll002-raise_on_alarmtrue-none), [`wait_idle`](../api/queue.md#wait_idle-timeoutnone-poll002-raise_on_alarmtrue-none)) instead of waiting forever for a queued command the firmware has refused to execute.
+While an alarm is active, the arm does not run its queue. A command that waits for the arm, such as [`ptp`](../api/motion.md#ptp) or [`wait_for`](../api/queue.md#wait_for), raises a [`DobotAlarmError`](../api/errors.md#dobotalarmerror) subclass chosen by the alarm category, as listed under [`Alarm`](../api/alarms.md#alarm). System alarms (`0x00` to `0x07`) usually require a power cycle.
 
-Codes `0x00..0x07` (system) typically need a power-cycle, not just `clear_alarm()`. pydobotlab does *not* automatically raise on these - they're informational.
+## Formatting
 
-## Pretty-printing
+`AlarmSet.format()` returns one line per active alarm. The control panel banner and the message of `DobotAlarmError` use the same text.
 
 ```python
-mask = bot.get_alarms()
-if mask:
-    for line in mask.format():
-        print(" •", line)
+for line in bot.get_alarms().format():
+    print(line)
 ```
 
-Sample output (for `LIMIT_POS_J3`):
-
-```
- • LIMIT_POS_J3: joint 3 (forearm) hit positive limit - jog Z down (or J3 negative), or call set_home()
+```text
+LIMIT_POS_J3: joint 3 (forearm) hit positive limit - jog Z down (or J3 negative), or call set_home()
 ```
 
-The `format()` output is what the panel banner displays and what `DobotKinematicError`'s message contains.
+## Encoding
 
-## Encoding back (mostly for tests)
+`pydobotlab.alarms.encode_alarms` converts alarm codes back to a mask, for tests:
 
 ```python
 from pydobotlab.alarms import Alarm, encode_alarms
 
-encode_alarms(
-    [Alarm.LIMIT_POS_J3]
-)  # → b'\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00'
+encode_alarms([Alarm.LIMIT_POS_J3])
+# b'\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00'
 ```

@@ -7,6 +7,7 @@ GetPose, set_home, ptp, alarms, and discovery all behave sensibly.
 
 from __future__ import annotations
 
+import math
 import time
 
 import pytest
@@ -14,10 +15,16 @@ import pytest
 from pydobotlab.commands import CommandID
 from pydobotlab.protocol import pack, unpack, unpack_floats
 from pydobotlab.simulator import (
+    FOREARM_LENGTH_MM,
+    MAXIMUM_REACH_MM,
+    REAR_ARM_LENGTH_MM,
+    TOOL_OFFSET_MM,
     FakeDobot,
     FakeDobotSerial,
     install_simulator,
+    is_reachable,
     is_simulator_installed,
+    joint_angles,
     stop_all,
 )
 
@@ -162,6 +169,90 @@ class TestInstallSimulator:
         assert {h.port for h in hits} == {"/dev/sim0", "/dev/sim1"}
         for h in hits:
             assert h.serial_number == "SIM-MAGICIAN"
+
+
+def test_speed_set_by_one_client_is_used_by_another_through_the_broker():
+    """The panel and a script share one arm, so they share its speed."""
+    from pydobotlab import Magician
+    from pydobotlab.broker import DobotBroker
+
+    install_simulator(arms=1)
+    with DobotBroker(port=0) as broker:
+        options = {"via_broker": True, "broker_port": broker.port, "verbose": False}
+        with (
+            Magician("/dev/sim0", **options) as panel_side,
+            Magician("/dev/sim0", **options) as script,
+        ):
+            panel_side.motion_params = (30, 30)
+            panel_side.set_jog_common_params(30, 30)
+            assert script.motion_params == (30.0, 30.0)
+            assert script.get_jog_common_params() == (30.0, 30.0)
+
+            script.motion_params = (80, 80)
+            assert panel_side.get_arm_speed_ratio(1) == 80.0
+
+
+# ---------------------------------------------------------------------------
+# 3. Workspace follows the real arm's joint ranges and arm lengths
+# ---------------------------------------------------------------------------
+
+
+def tool_position(base: float, rear_arm: float, forearm: float) -> tuple[float, float, float]:
+    """Forward kinematics, the inverse of joint_angles."""
+    radius = (
+        REAR_ARM_LENGTH_MM * math.sin(math.radians(rear_arm))
+        + FOREARM_LENGTH_MM * math.cos(math.radians(forearm))
+        + TOOL_OFFSET_MM
+    )
+    height = REAR_ARM_LENGTH_MM * math.cos(math.radians(rear_arm)) - FOREARM_LENGTH_MM * math.sin(
+        math.radians(forearm)
+    )
+    return (
+        radius * math.cos(math.radians(base)),
+        radius * math.sin(math.radians(base)),
+        height,
+    )
+
+
+@pytest.mark.parametrize(
+    "target",
+    [(200, 0, 50), (150, 120, 50), (200, 80, -30), (230, 0, -45), (300, 0, 50), (0, 200, 0)],
+)
+def test_reachable_targets_have_joint_angles_within_range(target):
+    angles = joint_angles(*target)
+    assert angles is not None
+    base, rear_arm, forearm = angles
+    assert -90 <= base <= 90 and 0 <= rear_arm <= 85 and -10 <= forearm <= 90
+    assert tool_position(*angles) == pytest.approx(target, abs=1e-6)
+
+
+def test_farthest_point_is_the_official_maximum_reach():
+    height_at_full_reach = REAR_ARM_LENGTH_MM * math.cos(math.radians(85))
+    assert is_reachable(MAXIMUM_REACH_MM, 0, height_at_full_reach)
+    assert not is_reachable(MAXIMUM_REACH_MM + 1, 0, height_at_full_reach)
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        (-200, 0, 50),  # behind the base: base range is -90..+90 degrees
+        (300, 0, 150),  # far and high
+        (90, 0, 150),  # close and high
+        (200, 0, -200),  # below the lowest reach
+        (500, 500, 0),
+    ],
+)
+def test_unreachable_targets(target):
+    assert not is_reachable(*target)
+
+
+def test_unreachable_target_sets_the_workspace_alarm():
+    arm = FakeDobot("/dev/sim-workspace")
+    try:
+        arm.set_motion_target(-200, 0, 50, 0)
+        assert arm._alarms[0x14 // 8] & (1 << (0x14 % 8))
+    finally:
+        arm.stop()
 
 
 def test_jump_parameters_have_defaults_before_first_write():

@@ -23,11 +23,16 @@ from .discovery import (
 )
 from .errors import (
     DobotAlarmError,
+    DobotConfigError,
     DobotConnectionError,
     DobotError,
     DobotKinematicError,
+    DobotLostStepError,
+    DobotOverspeedError,
+    DobotPermissionError,
     DobotPortInUseError,
     DobotProtocolError,
+    DobotSystemAlarmError,
     DobotTimeoutError,
 )
 from .protocol import EndEffectorType, IOFunction, JOGCmd, JogMode, PTPMode
@@ -61,10 +66,15 @@ __all__ = [
     "DobotError",
     "DobotProtocolError",
     "DobotTimeoutError",
+    "DobotConfigError",
     "DobotConnectionError",
     "DobotPortInUseError",
+    "DobotPermissionError",
     "DobotAlarmError",
     "DobotKinematicError",
+    "DobotOverspeedError",
+    "DobotLostStepError",
+    "DobotSystemAlarmError",
 ]
 
-__version__ = "0.1.0.1"
+__version__ = "0.2"
