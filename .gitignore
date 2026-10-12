@@ -11,3 +11,7 @@ htmlcov/
 site/
 PyPI-Recovery-Codes-*.txt
 /.local/
+CONTRIBUTING.md
+settings/*
+/to_check.md
+/to_check.ipynb
