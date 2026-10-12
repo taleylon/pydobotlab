@@ -49,6 +49,7 @@ Homepage = "https://taleylon.github.io/pydobotlab/"
 Documentation = "https://taleylon.github.io/pydobotlab/"
 Repository = "https://github.com/taleylon/pydobotlab"
 Issues = "https://github.com/taleylon/pydobotlab/issues"
+Changelog = "https://github.com/taleylon/pydobotlab/blob/main/CHANGELOG.md"
 
 [project.scripts]
 pydobotlab-panel = "pydobotlab.panel.app:main"
