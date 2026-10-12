@@ -75,6 +75,23 @@ def apply_overrides(config: Config, overrides: Config, path: Path) -> Config:
     return config
 
 
+def check_workspace_limits(workspace: dict, shipped: dict, path: Path) -> None:
+    """The [workspace] values may narrow the shipped area, not widen it."""
+    for key in ("min_radius_mm", "z_min_mm"):
+        if workspace[key] < shipped[key]:
+            raise DobotConfigError(
+                f"{path}: [workspace] {key} must be at least {shipped[key]}, got {workspace[key]}"
+            )
+    for key in ("max_radius_mm", "z_max_mm"):
+        if workspace[key] > shipped[key]:
+            raise DobotConfigError(
+                f"{path}: [workspace] {key} must be at most {shipped[key]}, got {workspace[key]}"
+            )
+    for low, high in (("min_radius_mm", "max_radius_mm"), ("z_min_mm", "z_max_mm")):
+        if workspace[low] >= workspace[high]:
+            raise DobotConfigError(f"{path}: [workspace] {low} must be below {high}")
+
+
 def create_user_config(path: Path) -> bool:
     """Copy the defaults to ``path``. ``False`` if the file cannot be written."""
     try:
@@ -93,7 +110,8 @@ def load_config(path: str | Path | None = None) -> Config:
 
     Raises:
         DobotConfigError: the file is missing (when named explicitly), is not
-            valid TOML, or contains an unknown key or a value of the wrong type.
+            valid TOML, contains an unknown key or a value of the wrong type,
+            or widens the [workspace] area.
     """
     config = default_config()
     if path is None:
@@ -105,7 +123,10 @@ def load_config(path: str | Path | None = None) -> Config:
             if not path.exists() and not create_user_config(path):
                 return config
     path = Path(path)
-    return apply_overrides(config, read_toml(path), path)
+    shipped_workspace = dict(config["workspace"])
+    apply_overrides(config, read_toml(path), path)
+    check_workspace_limits(config["workspace"], shipped_workspace, path)
+    return config
 
 
 _active_config: Config | None = None
