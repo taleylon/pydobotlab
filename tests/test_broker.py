@@ -18,6 +18,7 @@ from pydobotlab.broker import (
     list_broker_ports,
 )
 from pydobotlab.commands import CommandID
+from pydobotlab.config import default_config, set_config
 from pydobotlab.protocol import pack, pack_floats, unpack
 from pydobotlab.transport import _OPEN_PORTS, BrokerTransport
 
@@ -155,3 +156,116 @@ def test_handshake_rejects_unknown_port(broker):
     # so this *will* succeed in this test. Just assert open() works.
     bt.open()
     bt.close()
+
+
+def use_short_frame_timeout():
+    config = default_config()
+    config["broker"]["frame_timeout"] = 0.2
+    set_config(config)
+
+
+def test_idle_client_stays_connected_past_frame_timeout(broker):
+    """A client may be silent between requests for longer than the frame timeout
+    (a script waiting for input, a server waiting for requests)."""
+    import time
+
+    use_short_frame_timeout()
+    bt = BrokerTransport(
+        "/dev/fake-broker-A", broker_host="127.0.0.1", broker_port=broker.port, timeout=0.5
+    )
+    bt.open()
+    try:
+        assert bt.send_frame(CommandID.GET_POSE, 0).cmd_id == CommandID.GET_POSE
+        time.sleep(1.0)  # five times the frame timeout, no traffic
+        assert bt.send_frame(CommandID.GET_POSE, 0).cmd_id == CommandID.GET_POSE
+        assert "/dev/fake-broker-A" in broker.attached_ports()
+    finally:
+        bt.close()
+
+
+def test_stalled_partial_frame_is_still_dropped(broker):
+    """Idle is fine; a frame that starts and never finishes is not."""
+    import socket
+    import time
+
+    use_short_frame_timeout()
+    with socket.create_connection(("127.0.0.1", broker.port), timeout=2) as connection:
+        port_name = b"/dev/fake-broker-A"
+        connection.sendall(bytes((0x01, len(port_name))) + port_name)
+        assert connection.recv(1) == b"\x00"
+        connection.sendall(b"\x00")  # half of the 2-byte length prefix, then silence
+        time.sleep(0.6)
+        assert connection.recv(1) == b""  # broker closed the connection
+
+
+# -- failures reach the client; none are swallowed ----------------------------
+
+FAKE_PORT = "/dev/fake-broker-A"
+
+
+def broker_client(broker, **kwargs):
+    client = BrokerTransport(FAKE_PORT, broker_host="127.0.0.1", broker_port=broker.port, **kwargs)
+    client.open()
+    return client
+
+
+def test_arm_timeout_is_reported_and_connection_survives(broker):
+    from pydobotlab import DobotTimeoutError
+
+    arm = broker._transports[FAKE_PORT]._serial
+    answer = arm.write
+    requests = []
+
+    def silent_first_time(data):
+        requests.append(data)
+        return len(data) if len(requests) == 1 else answer(data)
+
+    arm.write = silent_first_time
+    client = broker_client(broker)
+    try:
+        with pytest.raises(DobotTimeoutError):
+            client.send_frame(CommandID.GET_POSE, 0)
+        assert client.is_open
+        assert client.send_frame(CommandID.GET_POSE, 0).cmd_id == CommandID.GET_POSE
+        assert FAKE_PORT in broker.attached_ports()
+    finally:
+        client.close()
+
+
+def test_serial_failure_is_reported_with_its_message(broker):
+    import serial
+
+    from pydobotlab import DobotConnectionError
+
+    arm = broker._transports[FAKE_PORT]._serial
+
+    def pulled_cable(data):
+        raise serial.SerialException("device disconnected")
+
+    arm.write = pulled_cable
+    client = broker_client(broker)
+    try:
+        with pytest.raises(DobotConnectionError, match="device disconnected"):
+            client.send_frame(CommandID.GET_POSE, 0)
+        assert client.is_open
+    finally:
+        client.close()
+
+
+def test_malformed_request_is_reported_not_dropped(broker):
+    import socket
+    import struct
+
+    from pydobotlab import DobotProtocolError
+    from pydobotlab.broker_protocol import receive_frame_bytes, send_frame_bytes
+
+    with socket.create_connection(("127.0.0.1", broker.port), timeout=2) as connection:
+        port_name = FAKE_PORT.encode()
+        connection.sendall(bytes((0x01, len(port_name))) + port_name)
+        assert connection.recv(1) == b"\x00"
+        send_frame_bytes(connection, b"\x00" * 8)  # right length, not a Dobot frame
+        with pytest.raises(DobotProtocolError, match="bad header"):
+            receive_frame_bytes(connection, allow_error_reply=True)
+        # Still connected: a valid request now succeeds.
+        send_frame_bytes(connection, pack(CommandID.GET_POSE, 0))
+        assert struct.unpack("!H", connection.recv(2))[0] >= 6
