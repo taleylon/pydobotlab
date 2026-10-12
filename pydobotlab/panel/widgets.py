@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from pydobotlab import __version__
 from pydobotlab.protocol import JOGCmd
 
 # Segment names. A pad uses exactly one of these two sets:
@@ -76,6 +77,13 @@ def segment_polygon(name: str, centre: QPointF, reach: float) -> QPolygonF:
         "bottom_right": [(0, 0), (1, 0), (1, 1), (0, 1)],
     }[name]
     return QPolygonF([QPointF(cx + dx * reach, cy + dy * reach) for dx, dy in corners])
+
+
+def version_label() -> QLabel:
+    """``pydobotlab v<version>``, for the right end of a window's status bar."""
+    label = QLabel(f"pydobotlab v{__version__}")
+    label.setObjectName("version")
+    return label
 
 
 class JogPad(QWidget):

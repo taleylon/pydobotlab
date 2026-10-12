@@ -31,7 +31,7 @@ from pydobotlab import CommandID, Dobot, DobotAlarmError, DobotConnectionError, 
 from pydobotlab.config import get_config
 from pydobotlab.protocol import JOGCmd, JogMode, pack_floats, pack_u8
 
-from .widgets import CoordReadout, JogPad, JumpParamsCard
+from .widgets import CoordReadout, JogPad, JumpParamsCard, version_label
 
 
 def slider_percent(speed_ratio: float) -> int:
@@ -284,6 +284,8 @@ class ControlPanel(QMainWindow):
         root.addWidget(self._effector)
 
         self.setStatusBar(QStatusBar())
+        self._version_label = version_label()
+        self.statusBar().addPermanentWidget(self._version_label)
 
     def build_end_effector_tabs(self) -> QTabWidget:
         tabs = QTabWidget()
