@@ -11,10 +11,10 @@ This module exposes that mechanism as a Python context manager:
     with dobot.batch():
         for x, y in path:
             dobot.ptp(PTPMode.MOVL_XYZ, x, y, 0, 0)
-    dobot.wait_idle()
 
-Inside the ``with`` block, queue execution is paused and every motion command
-goes into the firmware queue. On exit, execution resumes.
+Inside the ``with`` block, queue execution is paused and commands are only
+queued. On exit, the arm runs them and the block waits until they finish.
+If the block raises, the queued commands are discarded instead.
 """
 
 from __future__ import annotations
@@ -45,8 +45,9 @@ class BatchState:
 def batch_context(dobot: Dobot):
     """Implementation of ``Dobot.batch()`` - see :class:`pydobotlab.Dobot`.
 
-    Paused → enqueue commands → resumed. The outer block also clears the queue
-    on entry, so callers never inherit leftover state from a previous run.
+    Paused → enqueue commands → resumed and waited for. The outer block also
+    clears the queue on entry, so callers never inherit leftover state from a
+    previous run.
     """
     state = dobot._batch_state  # noqa: SLF001 (intentional internal access)
     with state.lock:
@@ -56,8 +57,17 @@ def batch_context(dobot: Dobot):
         state.depth += 1
     try:
         yield dobot
-    finally:
+    except BaseException:
         with state.lock:
             state.depth -= 1
-            if state.depth == 0:
-                dobot.start_queue()
+            is_outermost = state.depth == 0
+        if is_outermost:
+            dobot.clear_queue()
+            dobot.start_queue()
+        raise
+    with state.lock:
+        state.depth -= 1
+        is_outermost = state.depth == 0
+    if is_outermost:
+        dobot.start_queue()
+        dobot.wait_idle()

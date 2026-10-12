@@ -5,28 +5,23 @@ from __future__ import annotations
 import socket
 import struct
 
-from .errors import (
-    DobotConnectionError, 
-    DobotError, 
-    DobotProtocolError, 
-    DobotTimeoutError
-)
+from .errors import DobotConnectionError, DobotError, DobotProtocolError, DobotTimeoutError
 
 MIN_FRAME_BYTES = 6
 MAX_FRAME_BYTES = 259  # header (2), length (1), payload (255), checksum (1)
 
 ERROR_REPLY_LENGTH = 0
 
-ERROR_TIMEOUT       = 1  # the arm did not answer in time (the connection stays usable)
-ERROR_CONNECTION    = 2  # the serial link to the arm failed
-ERROR_PROTOCOL      = 3  # the request, or the arm's answer, was malformed
-ERROR_INTERNAL      = 4  # unexpected failure inside the broker
+ERROR_TIMEOUT = 1  # the arm did not answer in time (the connection stays usable)
+ERROR_CONNECTION = 2  # the serial link to the arm failed
+ERROR_PROTOCOL = 3  # the request, or the arm's answer, was malformed
+ERROR_INTERNAL = 4  # unexpected failure inside the broker
 
 _ERROR_TYPES: dict[int, type[DobotError]] = {
-    ERROR_TIMEOUT:      DobotTimeoutError,
-    ERROR_CONNECTION:   DobotConnectionError,
-    ERROR_PROTOCOL:     DobotProtocolError,
-    ERROR_INTERNAL:     DobotConnectionError,
+    ERROR_TIMEOUT: DobotTimeoutError,
+    ERROR_CONNECTION: DobotConnectionError,
+    ERROR_PROTOCOL: DobotProtocolError,
+    ERROR_INTERNAL: DobotConnectionError,
 }
 
 
@@ -60,10 +55,14 @@ def send_frame_bytes(connection: socket.socket, frame_bytes: bytes) -> None:
 def send_error_reply(connection: socket.socket, code: int, message: str) -> None:
     """Tell the client its request failed, and why."""
     message_bytes = message.encode("utf-8", errors="replace")[:255]
-    connection.sendall(struct.pack("!HBB", ERROR_REPLY_LENGTH, code, len(message_bytes)) + message_bytes)
+    connection.sendall(
+        struct.pack("!HBB", ERROR_REPLY_LENGTH, code, len(message_bytes)) + message_bytes
+    )
 
 
-def receive_frame_bytes(connection: socket.socket, *,
+def receive_frame_bytes(
+    connection: socket.socket,
+    *,
     wait_forever: bool = False,
     allow_error_reply: bool = False,
 ) -> bytes:
@@ -97,5 +96,5 @@ def receive_frame_bytes(connection: socket.socket, *,
 
     if not MIN_FRAME_BYTES <= frame_length <= MAX_FRAME_BYTES:
         raise DobotProtocolError(f"invalid broker frame length: {frame_length}")
-        
+
     return receive_exactly(connection, frame_length)

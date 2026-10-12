@@ -16,6 +16,14 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import IntEnum
 
+from .errors import (
+    DobotAlarmError,
+    DobotKinematicError,
+    DobotLostStepError,
+    DobotOverspeedError,
+    DobotSystemAlarmError,
+)
+
 
 class Alarm(IntEnum):
     """Named alarm codes. Value = bit position within the 128-bit mask."""
@@ -211,6 +219,30 @@ class AlarmSet:
                 tip = _BAND_TROUBLESHOOT.get(code & 0xF0, "see the firmware manual for details")
             out.append(f"{tag}: {tip}")
         return out
+
+
+# Exception raised for each alarm group, keyed by the group's first code.
+ERROR_FOR_ALARM_GROUP: dict[int, type[DobotAlarmError]] = {
+    0x00: DobotSystemAlarmError,
+    0x10: DobotKinematicError,
+    0x20: DobotKinematicError,
+    0x30: DobotOverspeedError,
+    0x40: DobotKinematicError,
+    0x50: DobotKinematicError,
+    0x60: DobotLostStepError,
+}
+
+
+def alarm_error(active: AlarmSet, heading: str, remedy: str) -> DobotAlarmError:
+    """Build the exception for the active alarms.
+
+    The class follows the group of the first active alarm. The message lists
+    every active alarm with its fix.
+    """
+    first_code = int(active.alarms[0]) if active.alarms else -1
+    error_class = ERROR_FOR_ALARM_GROUP.get(first_code & 0xF0, DobotAlarmError)
+    message = f"{heading}:\n  - " + "\n  - ".join(active.format()) + f"\n{remedy}"
+    return error_class(alarms=active.names(), message=message)
 
 
 def decode_alarms(raw: bytes) -> AlarmSet:
