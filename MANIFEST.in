@@ -1,4 +1,4 @@
-include LICENSE README.md CONTRIBUTING.md
+include LICENSE README.md CHANGELOG.md
 recursive-include pydobotlab *.py *.qss
 recursive-include tests *.py
 recursive-include examples *.py
@@ -13,3 +13,4 @@ include mkdocs.yml
 prune site
 global-exclude PyPI-Recovery-Codes-*.txt
 prune .local
+exclude to_check.md to_check.ipynb
