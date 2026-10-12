@@ -1,64 +1,57 @@
-# API Reference - Overview
+# API reference
 
-Start with the [28 official DobotLab Magician functions](dobotlab.md), then use
-the extended motion, queue, and streaming APIs as needed. All robot commands go
-through one class:
+This reference describes every public object in pydobotlab. Objects are importable from the top-level `pydobotlab` package unless the page names a submodule.
 
-```python
-from pydobotlab import Magician
-```
+## Sections
 
-`Magician` is the high-level Dobot Magician driver. (It's also exported as `Dobot` for backward compatibility with very old code; new code should prefer `Magician`.)
+| Section | Contents |
+|---|---|
+| [DobotLab compatibility](dobotlab.md) | The 28 DobotLab Magician functions and where each is documented. |
+| [Magician](magician.md) | Constructor, connection, and device information. |
+| [Motion](motion.md) | Pose reading, point-to-point and continuous-path moves, homing. |
+| [Jogging](jog.md) | Continuous motion along one axis or joint. |
+| [Motion parameters](speed.md) | Velocity, acceleration, JUMP, and continuous-path parameters. |
+| [Command queue](queue.md) | Waiting on, pausing, and clearing the firmware command queue. |
+| [Alarms](alarms.md) | Reading and clearing alarms. |
+| [End effectors](end-effectors.md) | Suction cup, gripper, and laser. |
+| [I/O and sensors](io.md) | Digital and analog I/O, PWM, color and infrared sensors. |
+| [Accessories](accessories.md) | Conveyor, slideway, and lost-step detection. |
+| [Pose stream](pose-stream.md) | Background pose polling. |
+| [Low-level commands](low-level.md) | Raw protocol commands and parameter packing. |
+| [Discovery](discovery.md) | Finding and probing serial ports. |
+| [Broker](broker.md) | Sharing one arm between several clients. |
+| [Simulator](simulator.md) | Simulated arms for use without hardware. |
+| [Configuration](config.md) | Per-user file with the default settings. |
+| [Exceptions](errors.md) | Exception hierarchy. |
 
-## The shape of every page
+## Conventions
 
-Every page in this section follows the same layout so you can scan it quickly:
+- Lengths are in millimetres, angles in degrees, durations in seconds, and ratios in percent (0 to 100).
+- The DobotLab functions that change the arm state wait until the arm has executed the command and return `True`. They raise a [`DobotAlarmError`](errors.md#dobotalarmerror) subclass when the arm reports an alarm.
+- Other methods that queue a command, such as [`cp`](motion.md#cp), return its firmware queue index (`int`). Pass the index to [`wait_for`](queue.md#wait_for) to block until the command executes.
+- Read methods return the value read. Other immediate commands return `None` unless stated otherwise.
+- Examples assume that the names they use are imported from `pydobotlab` and that `bot` is a connected instance:
 
-* **Group purpose** - one paragraph saying what the methods on this page are for.
-* **Methods** - for each public method:
-  * Python signature
-  * **Purpose** - what it does in plain English.
-  * **Inputs** - argument-by-argument table.
-  * **Returns** - what comes back.
-  * **Raises** - exceptions you might see.
-  * **Protocol** - the underlying [Dobot CommandID](../protocol/command-ids.md) and notes on how pydobotlab uses it (queued vs. immediate, packed parameter layout).
-  * **Notes** / **Example** - gotchas and a code snippet.
+    ```python
+    from pydobotlab import Magician
 
-Because most Magician methods send exactly one Dobot frame, the **Protocol** entry is the bridge between the friendly Python API and the wire-level [Dobot Communication Protocol V1.1.5](https://download.dobot.cc/product-manual/dobot-magician/pdf/en/Dobot-Communication-Protocol-V1.1.5.pdf). If you ever need to debug what's actually going down the serial line, that's where you look.
+    bot = Magician()
+    bot.connect()
+    ```
 
-## Methods by category
+- The protocol command sent by each method is listed in [Method ↔ command mapping](../protocol/method-to-cmd.md).
 
-| Category | Page |
-|----------|------|
-| Connection lifecycle (`connect`, `disconnect`, `is_open`, ...) | [Connection lifecycle](connection.md) |
-| Cartesian / joint motion (`move_to`, `ptp`, `set_home`, `set_r`) | [Pose & motion](motion.md) |
-| Live JOG nudges (`jog`, `jog_stop`) | [JOG](jog.md) |
-| Velocity & acceleration ratios, JUMP params (`motion_params`, `jump_params`, ...) | [Speed & motion parameters](speed.md) |
-| Reading and clearing alarms (`get_alarms`, `clear_alarm`, `ensure_no_alarms`) | [Alarms](alarms.md) |
-| Firmware queue (`start_queue`, `wait_for`, `wait_idle`, `batch`) | [Queue control](queue.md) |
-| Suction cup, gripper (`set_endeffector_*`) | [End-effectors](end-effectors.md) |
-| Digital I/O and sensors (`set_do`, `get_di`, `set_color_sensor`, ...) | [Digital I/O & sensors](io.md) |
-| Conveyor, slideway, lost-step (`set_conveyor`, `set_ptpwithl_cmd`, ...) | [Conveyor & extras](extras.md) |
-| Real-time pose stream (`start_pose_stream`, `stop_pose_stream`) | [Real-time pose stream](pose-stream.md) |
-| Finding arms (`Discovery`, `find_free_port`, `is_dobot`) | [Discovery](discovery.md) |
-| Exception hierarchy | [Errors & exceptions](errors.md) |
+## Deprecated aliases
 
-## Constants & enums you'll see
+| Alias | Use instead |
+|---|---|
+| `Magician.home` | [`Magician.set_home`](motion.md#set_home) |
+| `Magician.clear_alarms` | [`Magician.clear_alarm`](alarms.md#clear_alarm) |
+| `Magician.wait_seconds` | [`Magician.wait`](queue.md#wait) |
+| `Magician.get_pose_l` | [`Magician.get_posel`](accessories.md#get_posel) |
+| `Magician.get_slideway_pose` | [`Magician.get_posel`](accessories.md#get_posel) |
+| `AlarmSet.describe` | [`AlarmSet.format`](alarms.md#alarmset) |
 
-| Symbol | Where | What |
-|--------|-------|------|
-| [`PTPMode`](motion.md#ptp-modes) | `pydobotlab.protocol` | Mode selector for `ptp()` (JUMP / MOVJ / MOVL × XYZ / ANGLE / INC). |
-| [`JOGCmd`](jog.md#jogcmd) | `pydobotlab.protocol` | Direction selector for `jog()` (`AP_DOWN`, `AN_DOWN`, …). |
-| [`JogMode`](jog.md#jogmode) | `pydobotlab.protocol` | Coordinate vs. joint frame for `jog()`. |
-| [`EndEffectorType`](end-effectors.md) | `pydobotlab.protocol` | Identifier for the active end-effector. |
-| [`IOFunction`](io.md#iofunction) | `pydobotlab.protocol` | DO/PWM/DI/ADC/PullUp/PullDn for `set_multiplexing()`. |
-| [`Alarm`](alarms.md#alarm-codes) | `pydobotlab.alarms` | Named bit positions in the firmware's 128-bit alarm mask. |
-| [`CommandID`](../protocol/command-ids.md) | `pydobotlab.commands` | The underlying Dobot protocol command IDs. |
+## Version
 
-## A word on returned values
-
-Methods that **set** state and go through the firmware's queue (`ptp`, `set_home`, `set_endeffector_*`, ...) return the **queue index** assigned to that command - a monotonically increasing integer the firmware uses to tell you when it has executed your command. You can hand it to [`wait_for()`](queue.md#wait_forindex-timeoutnone-poll002-raise_on_alarmtrue-none) to block until it runs, or ignore it for fire-and-forget execution.
-
-Methods that **read** state (`get_pose`, `get_alarms`, `get_di`, ...) return the value directly.
-
-Methods that go **immediate** (no queue: `clear_alarm`, `clear_queue`, `start_queue`, `jog`, `jog_stop`, ...) return either `None`, the parsed `Frame`, or the value of interest - see each page for specifics.
+`pydobotlab.__version__` is the installed package version as a string.

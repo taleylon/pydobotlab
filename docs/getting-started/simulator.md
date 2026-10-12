@@ -1,8 +1,8 @@
-# Running without hardware (simulator)
+# Running without hardware
 
-`pydobotlab` ships with a built-in simulator so you can develop, demo, and run unit tests without an arm plugged in. The simulator monkey-patches `pyserial` at the bottom of the stack, so the rest of the library - `Magician`, the broker, the panel, your scripts - runs unchanged.
+The simulator replaces the serial layer with in-memory arms, so `Magician`, the broker, the control panel, and scripts run unchanged without an arm. See [Simulator](../api/simulator.md) for the API.
 
-## From a script
+## In a script
 
 ```python
 from pydobotlab.simulator import install_simulator
@@ -13,56 +13,45 @@ from pydobotlab import Magician
 
 with Magician(port="/dev/sim0") as bot:
     bot.set_home()
-    bot.move_to(200, 0, 50, 0)
+    bot.ptp(mode=1, x=200, y=0, z=50, r=0)  # MOVJ_XYZ
     print(bot.get_pose())
 ```
 
-`install_simulator(arms=N)` is idempotent - calling it twice in the same process is a no-op. It:
+`mode=1` selects a joint-interpolated move to a Cartesian target. See [`PTPMode`](../api/motion.md#ptpmode).
 
-1. Replaces `serial.Serial` with a fake that talks to an in-memory `FakeDobot`.
-2. Replaces `serial.tools.list_ports.comports()` so discovery sees fake ports as if they were real Dobot adapters.
-3. Pre-creates the named arms (`/dev/sim0`, `/dev/sim1`, ...) so they're available before the first `connect()`.
+`install_simulator` replaces `serial.Serial` with a simulated port, makes port discovery list the simulated arms, and creates the arms. Calling it again in the same process has no effect.
 
-Each fake arm has a tiny motion model that interpolates toward the latest target so pose readouts animate visibly. JOG, multi-stage HOME, the speed slider, JUMP-mode, and the workspace check are all simulated.
-
-## From the panel
-
-Pass `--simulator` to spin up the GUI against fake arms:
+## In the control panel
 
 ```bash
 pydobotlab-panel --simulator --arms 2
 ```
 
-This is the recommended way to demo the full system without hardware.
+## Simulated behavior
 
-## What the simulator models
+| Feature | Simulated |
+|---|---|
+| Pose interpolation toward point-to-point targets | Yes |
+| Jogging in Cartesian and joint modes | Yes |
+| Multi-stage homing | Yes |
+| Velocity and acceleration ratios | Yes |
+| JUMP parameters | Yes |
+| Workspace limits and the out-of-workspace alarm | Yes |
+| Alarm read and clear | Yes |
+| Multiple clients through the broker | Yes |
+| End-effector and I/O commands | Acknowledged, not visualized |
 
-| Feature                                       | Simulated? |
-|-----------------------------------------------|-----------|
-| Pose interpolation toward PTP targets         | yes |
-| JOG (live nudge in coord/joint mode)          | yes |
-| Multi-stage HOME (lift → swing → descend)     | yes |
-| Speed slider (PTP & JOG vel/acc ratios)       | yes |
-| JUMP-mode params (height, zlimit)             | yes |
-| Workspace bounds + alarm raise on violation   | yes |
-| Alarm bitmask read/clear                      | yes |
-| Multi-client via the broker                   | yes |
-| End-effector valves & I/O                     | acked but not visualised |
+Commands that are not simulated return zero values.
+## Stopping the simulated arms
 
-Anything not explicitly modelled (most reads) returns plausible zeros so your code doesn't crash. The simulator's source is `pydobotlab/simulator.py`.
-
-## Stopping the fakes
-
-In tests:
+Tests can stop all simulated arms with `stop_all()`. The background threads are daemon threads and also end with the process.
 
 ```python
 from pydobotlab.simulator import stop_all
 
-stop_all()  # joins all FakeDobot background threads
+stop_all()
 ```
-
-You normally don't need to call this - the threads are daemons and exit with the process.
 
 ## Next
 
-* [API Reference overview →](../api/overview.md)
+- [API reference](../api/overview.md)

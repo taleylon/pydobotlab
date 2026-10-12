@@ -1,75 +1,71 @@
 # The DobotBroker
 
-The broker is a tiny TCP server that lets several clients (the panel, your script, a logger, …) share one serial port without stepping on each other. It runs on `127.0.0.1:8765` by default and is auto-spawned by the panel when no broker is reachable.
+The broker is a local TCP server that owns serial ports and relays Dobot frames between them and any number of clients, such as the control panel and scripts. It listens on `127.0.0.1:8765` by default. The panel starts one when none is running.
 
 ```
-┌────────────┐  TCP   ┌──────────────────┐  serial  ┌────────┐
-│ ControlPanel│──────►│   DobotBroker    │─────────►│  arm   │
-│ (Magician)  │        │  per-port refcnt │          └────────┘
-└────────────┘        │   ATTACH/SEND    │
-                      └────────▲─────────┘
-┌────────────┐  TCP            │
-│ your script │────────────────┘
-│ (Magician)  │
-└────────────┘
+ ┌──────────────┐  TCP   ┌──────────────────┐  serial  ┌──────┐
+ │ ControlPanel │───────►│                  │─────────►│      │
+ │ (Magician)   │        │   DobotBroker    │          │  arm │
+ └──────────────┘        │                  │          │      │
+ ┌──────────────┐  TCP   │                  │          └──────┘
+ │ script       │───────►│                  │
+ │ (Magician)   │        └──────────────────┘
+ └──────────────┘
 ```
 
-`Magician(via_broker="auto")` (the default) uses the broker if one is reachable; otherwise it opens the serial port directly.
+With `via_broker="auto"` (the default), `Magician` connects through a broker when one is reachable and opens the serial port directly otherwise. See [`Magician`](../api/magician.md#magician) and the [Broker API](../api/broker.md).
 
-## Wire protocol (broker-side, not the Dobot protocol)
+## Wire protocol
 
-> This is the protocol *between* `Magician` and the broker. The Dobot frames are tunneled inside it.
+This is the protocol between `Magician` and the broker. Dobot frames are relayed unchanged inside it.
 
-### ATTACH handshake
+### List ports
 
-Client → broker: `0x01 | u8 N | port[N]` (port name as ASCII).
+Client to broker: `0x00`.
 
-Broker → client (single byte):
-* `0x00` - attached. Subsequent traffic is request/response framing (below).
-* `0x01` - broker has no transport for that port and could not open one.
-* `0x02` - port is busy.
+Broker to client: `u8 N`, then `N` entries of `u8 LEN | port[LEN]` (ASCII), one for each attached port.
 
-### Per-frame request/response
+### Attach
 
-Client → broker: `u16 LEN (big-endian) | DOBOT_FRAME[LEN]`.
+Client to broker: `0x01 | u8 LEN | port[LEN]` (ASCII).
 
-Broker → client: `u16 LEN (big-endian) | DOBOT_FRAME[LEN]`.
+Broker to client, one byte:
 
-The Dobot frames inside this tunnel are exactly the [wire frames](../protocol/frame-format.md) `Magician` would otherwise send straight to the serial port - the broker just forwards them and reads the reply.
+| Reply | Meaning |
+|---|---|
+| `0x00` | Attached. The connection switches to frame relay. |
+| `0x01` | The port could not be opened. |
+| `0x02` | The port is busy. |
+| `0x03` | Unknown command. |
+| `0x04` | Permission denied. |
 
-## Reference counting
+### Frame relay
 
-When N clients ATTACH to the same port, the broker's per-port `SerialTransport` is opened on first attach and closed on the *last* detach. This is how the panel can come and go without dropping the script's connection.
+Both directions: `u16 LEN (big-endian) | DOBOT_FRAME[LEN]`. Each client request produces one reply. The frames are the [wire frames](../protocol/frame-format.md) that `Magician` would otherwise send to the serial port.
 
-`broker.list_broker_ports(host, port)` lets a `Magician` ask the broker which ports it currently owns.
+### Errors
 
-## Python entry points
+If the arm does not answer, the serial link fails, or a request is malformed, the broker replies with `u16 0 | u8 CODE | u8 LEN | message[LEN]` instead of a frame.
 
-```python
-from pydobotlab import broker
+| Code | Meaning | Raised by the client as |
+|---|---|---|
+| `1` | Timeout | `DobotTimeoutError` |
+| `2` | Connection failure | `DobotConnectionError` |
+| `3` | Protocol error | `DobotProtocolError` |
+| `4` | Internal error | `DobotConnectionError` |
 
-broker.is_broker_reachable("127.0.0.1", 8765)  # bool
-broker.list_broker_ports("127.0.0.1", 8765)  # list[str]
-```
+The connection stays open after an error, except after a malformed byte stream, when the broker closes it.
 
-The broker object itself (`DobotBroker`) is also instantiable if you want to host your own - though normally the panel does it for you:
+### Timeouts
 
-```python
-from pydobotlab.broker import DobotBroker
+A client may be idle between requests for any length of time. A frame that starts to arrive and then stalls is dropped. TCP keepalive removes clients that disappear without closing the connection. A client that times out waiting for a reply closes the connection.
 
-b = DobotBroker(host="127.0.0.1", port=8765)
-b.start()  # background thread; non-blocking
-# … later …
-b.stop()
-```
+## Port ownership
 
-## When *not* to use the broker
+A port requested by a client and not yet attached is opened on demand. The broker closes it when its last client disconnects. A port opened with [`DobotBroker.attach`](../api/broker.md#dobotbroker-attach) stays open until it is detached or the broker stops.
 
-* Tight benchmarks where the extra TCP hop matters (`via_broker=False`).
-* Embedded contexts where you can't open a TCP port.
+Requests for one port are handled one at a time, so clients never receive partial frames.
 
-## Implementation notes
+## Disabling the broker
 
-* The broker uses a single `serial.Serial` per port internally and serialises requests on a per-port lock. This means N clients sharing one port pay the cost of one serial round-trip per request, but never get partial frames.
-* On first ATTACH for a previously-unknown port, the broker tries to open it lazily with the same `SerialTransport(exclusive=True)` settings `Magician` would use directly.
-* Source: `pydobotlab/broker.py`.
+Use `Magician(via_broker=False)` to always open the serial port directly, for example when TCP connections are not available or when the extra hop matters.

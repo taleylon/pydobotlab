@@ -1,96 +1,56 @@
 # Frame format
 
-pydobotlab implements the **Dobot Communication Protocol V1.1.5**, the same protocol the official DobotStudio / DobotLink stack uses.
+pydobotlab implements the [Dobot Communication Protocol V1.1.5](../Dobot-Communication-Protocol-V1.1.5.pdf). The command IDs and parameter layouts in this reference are taken from that document.
 
-> **Reference document.** [Dobot Communication Protocol V1.1.5 (PDF)](https://download.dobot.cc/product-manual/dobot-magician/pdf/en/Dobot-Communication-Protocol-V1.1.5.pdf). Every command ID and parameter layout in this guide is taken directly from that PDF - when in doubt, that's the canonical source.
+The protocol is request and response over a serial line at 115200 baud, 8N1. The arm answers every command with exactly one frame.
 
-The protocol is a **request / response** framing over a serial line at **115200 8N1**. Every command the host sends gets exactly one frame back, on the same line.
-
-## Frame layout
+## Layout
 
 ```
 +--------+--------+--------+--------+--------+--- ... ---+----------+
 |  0xAA  |  0xAA  |  len   |   ID   |  Ctrl  |  Params   | Checksum |
 +--------+--------+--------+--------+--------+--- ... ---+----------+
-          header           |<------ "payload" of len bytes ----->|
+          header           |<------ payload of len bytes ------>|
 ```
 
-| Field      | Bytes | Notes |
-|------------|-------|-------|
-| Header     | 2     | Always `0xAA 0xAA`. The reader resyncs on this. |
-| Length     | 1     | Number of *payload* bytes that follow (i.e. `id + ctrl + params`). Excludes header and checksum. Max = 255. |
-| ID         | 1     | The Dobot [command ID](command-ids.md). |
-| Ctrl       | 1     | Bit 0 = `rw` (0 = get, 1 = set). Bit 1 = `isQueued` (0 = immediate, 1 = enqueue). See [Control byte](ctrl-byte.md). |
-| Params     | 0..N  | Command-specific. All multi-byte fields are **little-endian**. |
-| Checksum   | 1     | The byte that makes `(sum(payload) + checksum) mod 256 == 0`. I.e. `chk = (-sum(payload)) & 0xFF`. |
+| Field | Bytes | Description |
+|---|---|---|
+| Header | 2 | `0xAA 0xAA`. The reader resynchronizes on it. |
+| Length | 1 | Number of payload bytes: ID, control byte, and parameters. At most 255. |
+| ID | 1 | [Command ID](command-ids.md). |
+| Ctrl | 1 | Bit 0 is `rw` (0 = get, 1 = set). Bit 1 is `isQueued` (0 = immediate, 1 = queued). See [Control byte](ctrl-byte.md). |
+| Params | 0 to 253 | Command-specific. |
+| Checksum | 1 | `(-sum(payload)) & 0xFF`, so that the payload sum plus the checksum is 0 modulo 256. |
 
-## Worked example - `GetPose`
+## Field encoding
 
-Wire bytes the host sends:
+- Integers and floats are little-endian.
+- Floats are 32-bit IEEE 754.
+- Strings, such as the device name, are zero-padded ASCII. Trailing zeros are removed when reading.
+
+## Example: `GetPose`
+
+Request:
 
 ```
 AA AA   02   0A 00   F6
-^^^^^   ^^   ^^^^^   ^^
-header  len  id ctrl checksum
-        2    10 0    -(10+0) & 0xFF = 0xF6
+header  len  id ctrl  checksum
 ```
 
-Wire bytes the arm replies (8 floats, 32 bytes):
+The length is 2 (ID and control byte). The checksum is `-(0x0A + 0x00) & 0xFF = 0xF6`.
+
+Response with eight 32-bit floats (32 bytes):
 
 ```
-AA AA  22  0A 00  <32 bytes of floats>  <chk>
+AA AA  22  0A 00  <32 bytes>  <checksum>
 ```
 
-The 32 payload bytes are 8 little-endian `float32`: `x, y, z, r, j1, j2, j3, j4`.
+The floats are `x, y, z, r, j1, j2, j3, j4`.
 
-pydobotlab's `pack()` and `unpack()` (in [`pydobotlab/protocol.py`](https://github.com/anthropic/pydobotlab/blob/main/pydobotlab/protocol.py)) implement exactly this layout.
+## Queued responses
 
-## Pack / unpack code
+The response to a set command with `isQueued=1` is a single `uint64`: the queue index assigned by the firmware. This is the value returned by `ptp`, `set_endeffector_*`, and the other queued methods.
 
-```python
-HEADER = b"\xaa\xaa"
+## Implementation
 
-
-def calculate_checksum(payload: bytes) -> int:
-    return (-sum(payload)) & 0xFF
-
-
-def pack(cmd_id: int, ctrl: int, params: bytes = b"") -> bytes:
-    payload_len = 2 + len(params)
-    payload = bytes((cmd_id, ctrl)) + params
-    return HEADER + bytes((payload_len,)) + payload + bytes((calculate_checksum(payload),))
-```
-
-(Unpack does the reverse, with header and checksum validation; the streaming reader resyncs on bad headers, which makes recovery from line glitches automatic.)
-
-## Multi-byte field conventions
-
-* All integers and floats are **little-endian**.
-* Floats are 32-bit IEEE-754.
-* Strings (e.g. device name) are 0-padded ASCII; the trailing zeros are stripped on unpack.
-
-## `Frame` (decoded form)
-
-Once a frame is unpacked pydobotlab gives you back a small dataclass:
-
-```python
-@dataclass(frozen=True, slots=True)
-class Frame:
-    cmd_id: int
-    ctrl: int
-    params: bytes
-
-    @property
-    def rw(self) -> bool:  # Ctrl bit 0
-        return bool(self.ctrl & 0b01)
-
-    @property
-    def is_queued(self) -> bool:  # Ctrl bit 1
-        return bool(self.ctrl & 0b10)
-```
-
-Lots of pydobotlab's `Magician` methods return `Frame` directly (or a value parsed out of `frame.params`).
-
-## Special case - queued response
-
-When you send a write with `isQueued=1`, the response payload is *always* a single `uint64` - the **queued-command index** assigned by the firmware. That's the integer `move_to`/`set_home`/`set_endeffector_*` return.
+`pydobotlab.protocol` provides `pack` and `unpack` for frames, `read_frame` for streaming reads, and the [`Frame`](../api/low-level.md#frame) class for decoded frames. `unpack` raises `DobotProtocolError` for a bad header, length, or checksum. `read_frame` skips bytes until it finds a header.

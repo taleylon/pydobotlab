@@ -1,126 +1,120 @@
-# Errors & exceptions
+# Exceptions
 
-Every error pydobotlab raises descends from `DobotError`, so a single `except DobotError` catches them all. The hierarchy is:
+All exceptions derive from `DobotError` and are importable from `pydobotlab` and `pydobotlab.errors`.
 
-```
+```text
 DobotError
+├── DobotConfigError
 ├── DobotConnectionError
-│   └── DobotPortInUseError
+│   ├── DobotPortInUseError
+│   └── DobotPermissionError
 ├── DobotProtocolError
 ├── DobotTimeoutError
-├── DobotAlarmError
-│   └── DobotKinematicError
+└── DobotAlarmError
+    ├── DobotKinematicError
+    ├── DobotOverspeedError
+    ├── DobotLostStepError
+    └── DobotSystemAlarmError
 ```
 
-Import them from `pydobotlab.errors` (re-exported at top level for convenience):
+| Exception | Description |
+|---|---|
+| [`DobotError`](#doboterror) | Base class. |
+| [`DobotConfigError`](#dobotconfigerror) | The configuration file is invalid. |
+| [`DobotConnectionError`](#dobotconnectionerror) | The connection could not be opened or used. |
+| [`DobotPortInUseError`](#dobotportinuseerror) | The port is busy. |
+| [`DobotPermissionError`](#dobotpermissionerror) | Access to the port was denied. |
+| [`DobotProtocolError`](#dobotprotocolerror) | A malformed frame was received. |
+| [`DobotTimeoutError`](#dobottimeouterror) | A response or wait timed out. |
+| [`DobotAlarmError`](#dobotalarmerror) | The arm reported an alarm. |
+| [`DobotKinematicError`](#dobotkinematicerror) | A planning, kinematic, or joint-limit alarm. |
+| [`DobotOverspeedError`](#dobotoverspeederror) | A joint over-speed alarm. |
+| [`DobotLostStepError`](#dobotloststeperror) | A lost-step alarm. |
+| [`DobotSystemAlarmError`](#dobotsystemalarmerror) | A system alarm. |
+
+---
+
+## `DobotError` {#doboterror}
+
+Base class of all pydobotlab exceptions.
+
+---
+
+## `DobotConfigError` {#dobotconfigerror}
+
+The [configuration file](config.md) is invalid. The message names the file and the setting. Raised by the first use of any object that reads a default setting.
+
+---
+
+## `DobotConnectionError` {#dobotconnectionerror}
+
+The serial port or broker connection could not be opened, read, or written, or a command was sent while not connected.
+
+---
+
+## `DobotPortInUseError` {#dobotportinuseerror}
+
+Subclass of [`DobotConnectionError`](#dobotconnectionerror). The port is open in this process or held by another program. The message has the form `port 'COM3' is busy`.
+
+---
+
+## `DobotPermissionError` {#dobotpermissionerror}
+
+Subclass of [`DobotConnectionError`](#dobotconnectionerror). The operating system denied access to the port (Linux and macOS). The message names the condition and its remedy:
+
+- The user is not in the group of the device, for example `dialout` on Ubuntu and Debian or `uucp` on Arch Linux.
+- The user was added to the group after the current session started.
+- The user is in the group and access is still denied.
+- The group has no read and write permission on the device.
+
+---
+
+## `DobotProtocolError` {#dobotprotocolerror}
+
+A malformed frame was received: invalid header, length, or checksum.
+
+---
+
+## `DobotTimeoutError` {#dobottimeouterror}
+
+No response arrived within the read timeout, or a wait exceeded its `timeout`. Raised by any command and by [`wait_for`](queue.md#wait_for), [`wait_idle`](queue.md#wait_idle), and [`move_to`](motion.md#move_to).
+
+---
+
+## `DobotAlarmError` {#dobotalarmerror}
 
 ```python
-from pydobotlab.errors import (
-    DobotError,
-    DobotConnectionError,
-    DobotPortInUseError,
-    DobotProtocolError,
-    DobotTimeoutError,
-    DobotAlarmError,
-    DobotKinematicError,
-)
+DobotAlarmError(alarms=None, message="")
 ```
 
----
+The arm reported an alarm. Raised by every DobotLab function that changes the arm state, such as [`ptp`](motion.md#ptp), and by [`move_to`](motion.md#move_to), [`wait_for`](queue.md#wait_for), [`wait_idle`](queue.md#wait_idle), [`batch`](queue.md#batch), [`clear_alarm`](alarms.md#clear_alarm), and [`ensure_no_alarms`](alarms.md#ensure_no_alarms). The arm refuses further commands until the alarm is cleared with [`clear_alarm`](alarms.md#clear_alarm) or the panel's Clear Alarm button. See [Alarms and recovery](../guide/alarms.md).
 
-## `DobotError`
+The subclass follows the category of the alarm, as listed under [`Alarm`](alarms.md#alarm). The message lists each active alarm with a remedy.
 
-Base class - never raised directly. Catch this if you want to handle "anything pydobotlab can fail with".
-
----
-
-## `DobotConnectionError`
-
-Could not open / read / write the serial port (or the broker socket).
-
-**Common causes.**
-* Port doesn't exist (cable unplugged, wrong COM name).
-* Permission denied (Linux: not in `dialout` group).
-* Underlying read/write blew up after the port was open.
+| Attribute | Type | Description |
+|---|---|---|
+| `alarms` | `list[str]` | Names of the active alarms. |
 
 ---
 
-## `DobotPortInUseError` *(extends `DobotConnectionError`)*
+## `DobotKinematicError` {#dobotkinematicerror}
 
-The requested serial port is already claimed:
-* …by another `Magician` instance **in this process** (caught eagerly via the in-process registry), *or*
-* …by another OS process (POSIX exclusive `flock` conflict, or Windows file-share denial).
-
-If you see this and don't expect it: check whether the control panel is already running, or whether a previous run didn't disconnect cleanly.
+Subclass of [`DobotAlarmError`](#dobotalarmerror). A planning, kinematic, or joint-limit alarm, for example a target outside the [workspace](../guide/workspace.md).
 
 ---
 
-## `DobotProtocolError`
+## `DobotOverspeedError` {#dobotoverspeederror}
 
-A malformed or unexpected packet was received from the arm - bad frame header, length mismatch, or bad checksum. pydobotlab's reader resyncs on bad headers, so this generally means the wire was *very* corrupted (cable issue, baud-rate mismatch).
-
----
-
-## `DobotTimeoutError`
-
-A command did not receive a response within the configured timeout. Most often raised by:
-* `wait_for(index, timeout=...)` when the firmware queue didn't reach `index` in time.
-* The transport when a frame read or write itself timed out.
+Subclass of [`DobotAlarmError`](#dobotalarmerror). A joint exceeded its maximum speed (`OVERSPEED_J1` to `OVERSPEED_J4`).
 
 ---
 
-## `DobotAlarmError`
+## `DobotLostStepError` {#dobotloststeperror}
 
-The arm reported one or more alarms while a command was pending. Constructor:
-
-```python
-class DobotAlarmError(DobotError):
-    def __init__(self, alarms: list[str] | None = None, message: str = ""): ...
-```
-
-* `alarms` - list of alarm names that were active.
-* The default message is `f"Dobot alarms active: {self.alarms}"`; you can override.
-
-Raised by [`ensure_no_alarms()`](alarms.md#ensure_no_alarms-none) and by [`clear_alarm(verify=True)`](alarms.md#clear-alarm) when the alarm reasserts itself after clearing.
+Subclass of [`DobotAlarmError`](#dobotalarmerror). A joint lost steps (`LOST_STEP_J1` to `LOST_STEP_J4`).
 
 ---
 
-## `DobotKinematicError` *(extends `DobotAlarmError`)*
+## `DobotSystemAlarmError` {#dobotsystemalarmerror}
 
-A motion command failed because the firmware couldn't plan or execute it. Specifically, one of these alarms fired while a motion was pending:
-
-* `PLAN_INVERSE_RESOLVE` - IK solver couldn't find a solution.
-* `PLAN_MOTION_TARGET_OUT_OF_WORKSPACE` - target outside reach.
-* `KINEMATIC_TARGET_OUT_OF_WORKSPACE` - same, kinematic side.
-* `PLAN_INVERSE_LIMIT` / `KINEMATIC_INVERSE_LIMIT` - IK hit a joint limit.
-* `PLAN_IN_SINGULARITY_ZONE` / `KINEMATIC_SINGULARITY` - singular pose.
-* `PLAN_CURRENT_JOINT_OUT_OF_RANGE` - start pose already off-range.
-* `LIMIT_POS_J*` / `LIMIT_NEG_J*` - joint limit struck mid-motion.
-
-The exception's `str()` includes one `"{TAG}: {explanation + how to fix}"` line per active alarm, plus the recovery instruction:
-
-> Recover by calling `clear_alarm()` (or `set_home()` if you want to also re-zero the arm) before retrying.
-
-Raised by [`move_to`](motion.md#move-to), [`set_home`](motion.md#set_home-waittrue-timeout600-raise_on_alarmtrue-int), [`wait_for`](queue.md#wait_forindex-timeoutnone-poll002-raise_on_alarmtrue-none), [`wait_idle`](queue.md#wait_idle-timeoutnone-poll002-raise_on_alarmtrue-none).
-
----
-
-## Recovering from errors
-
-```python
-from pydobotlab import Magician
-from pydobotlab.errors import DobotKinematicError, DobotAlarmError
-
-with Magician() as bot:
-    try:
-        bot.move_to(9999, 0, 0, 0)
-    except DobotKinematicError as e:
-        print(e)  # has the troubleshoot lines
-        bot.clear_alarm()  # back to a clean state
-        # …optionally retry with a reachable target…
-    except DobotAlarmError as e:
-        print("non-motion alarm:", e.alarms)
-        bot.clear_alarm()
-```
-
-For the user-facing equivalent inside the panel, see [Control Panel](../panel/overview.md).
+Subclass of [`DobotAlarmError`](#dobotalarmerror). The arm reported a system fault (`PUBLIC_RESET` to `PUBLIC_ANGLE_SENSOR_READ`).
