@@ -10,7 +10,9 @@ python -m pip install "pydobotlab[gui]"
 
 ## Windows
 
-**Hub.** Lists the arms found, by port (`COM3`, `/dev/ttyACM0`). *Refresh* scans again. *Open Control Panel* opens a control panel for the selected arm.
+**Hub.** Lists the arms found, by port (`COM3`, `/dev/ttyACM0`). Only ports identified as a Dobot Magician ([Discovery](../api/discovery.md)) are listed as arms; ports that answer otherwise are under *Other devices (n)*, collapsed until clicked. *Refresh* scans again. *Open Control Panel* opens a control panel for the selected arm.
+
+The hub and each control panel show the pydobotlab version at the bottom right.
 
 **Control panel.** One window per arm:
 

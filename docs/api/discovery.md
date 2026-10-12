@@ -1,6 +1,14 @@
 # Discovery
 
-Find serial ports and probe them for Dobot arms. The functions are also available as static methods of [`Discovery`](#discovery).
+Find serial ports and probe them for Dobot Magician arms. The functions are also available as static methods of [`Discovery`](#discovery).
+
+A port is identified as a Dobot Magician when it answers three read requests in the formats of the [Communication Protocol](../Dobot-Communication-Protocol-V1.1.5.pdf). The protocol has no command that reports the model. The requests do not move the arm or change its state.
+
+| Request | Expected reply | Protocol |
+|---|---|---|
+| `GetDeviceSN` | Command ID 0 and the serial number. | Table 6 |
+| `GetDeviceVersion` | Command ID 2 and three version bytes. | Table 12 |
+| `GetPose` | Command ID 10 and eight finite floats: X, Y, Z, R, and the four joint angles. | Table 22 |
 
 | Member | Description |
 |---|---|
@@ -12,7 +20,7 @@ Find serial ports and probe them for Dobot arms. The functions are also availabl
 | [`is_port_in_use`](#is_port_in_use) | Whether a port is open in this process. |
 | [`Discovery`](#discovery) | Namespace of the discovery functions. |
 | [`PortInfo`](#portinfo) | Serial port description. |
-| [`DiscoveredDobot`](#discovereddobot) | Port that answered as a Dobot. |
+| [`DiscoveredDobot`](#discovereddobot) | Port identified as a Dobot Magician. |
 | [`ProbeFailure`](#probefailure) | Port that failed the probe. |
 | [`KNOWN_DOBOT_USB_IDS`](#known_dobot_usb_ids) | USB IDs of known Dobot adapters. |
 
@@ -42,7 +50,7 @@ List serial ports. Known Dobot adapters are listed first. No data is sent to the
 pydobotlab.is_dobot(port, *, timeout=None) -> bool
 ```
 
-Return whether a Dobot answers on `port`. Returns `True` for a port already open in this process.
+Return whether a Dobot Magician answers on `port`. Returns `True` for a port already open in this process.
 
 **Parameters**
 
@@ -59,7 +67,7 @@ Return whether a Dobot answers on `port`. Returns `True` for a port already open
 pydobotlab.discover(*, only_known_adapters=False, timeout=None, skip=()) -> list[DiscoveredDobot]
 ```
 
-Probe all ports and return those that answer as a Dobot. Ports open in this process are skipped.
+Probe all ports and return those identified as a Dobot Magician. Ports open in this process are skipped.
 
 **Parameters**
 
@@ -106,7 +114,7 @@ for failure in failures:
 pydobotlab.find_free_port(*, only_known_adapters=False) -> str | None
 ```
 
-Return the first port that answers as a Dobot and is not open in this process, or `None`.
+Return the first port identified as a Dobot Magician and not open in this process, or `None`.
 
 **Parameters**
 
@@ -161,7 +169,7 @@ Serial port returned by [`list_ports`](#list_ports). Immutable.
 class pydobotlab.DiscoveredDobot(port, serial_number, description="")
 ```
 
-Port that answered as a Dobot. Immutable.
+Port identified as a Dobot Magician. Immutable.
 
 | Attribute | Type | Description |
 |---|---|---|
@@ -183,7 +191,7 @@ Port that failed the probe in [`discover_with_diagnostics`](#discover_with_diagn
 |---|---|---|
 | `port` | `str` | Port name. |
 | `description` | `str` | Description from the operating system. |
-| `reason` | `str` | `"permission"`: access denied by the operating system. `"busy"`: the port is held by another program. `"no_reply"`: the port opened but no Dobot answered. `"other"`: any other failure. |
+| `reason` | `str` | `"permission"`: access denied by the operating system. `"busy"`: the port is held by another program. `"no_reply"`: the port opened but did not answer as a Dobot Magician. `"other"`: any other failure. |
 | `detail` | `str` | Error message. |
 
 ---

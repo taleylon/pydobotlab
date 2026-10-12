@@ -42,5 +42,5 @@ The panel's pose readout updates while the script moves the arm. `examples/two_d
 
 ## Troubleshooting
 
-- **No arms listed.** The hub lists each rejected port with the reason (`permission`, `busy`, `no_reply`, or `other`). On Linux, see [Linux setup](../getting-started/linux.md). `python -m serial.tools.list_ports` shows the ports the operating system reports.
+- **No arms listed.** The hub lists each port that could not be opened, with the reason: a permission problem, `port is busy`, or `couldn't open`. Ports that answered, but not as a Dobot Magician, are under *Other devices (n)*. On Linux, see [Linux setup](../getting-started/linux.md). `python -m serial.tools.list_ports` shows the ports the operating system reports.
 - **Port busy.** Another program holds the port: another panel, DobotStudio, or a running script. A process that has exited does not hold the port.

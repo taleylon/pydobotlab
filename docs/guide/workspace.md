@@ -29,6 +29,10 @@ The base turns 90° to each side, so targets behind the base (x < 0) are out of 
 
 Side view (Figure 2.2) and top view (Figure 2.3) of the user guide. Dimensions in mm.
 
+## Reference bounds
+
+The `[workspace]` section of the [configuration file](../api/config.md) holds the bounds of the reachable region for reference, in mm: `min_radius_mm` and `max_radius_mm` (distance from the base axis), `z_min_mm`, and `z_max_mm`. The values come from the maximum reach and Figure 2.2. A target outside the bounds is out of reach; a target inside can still be out of reach, for example far out and high. Neither the arm nor pydobotlab checks moves against them. Programs can read them with `get_config()["workspace"]` from `pydobotlab.config`, as `examples/draw_smiley.py` does to check its path before drawing. The bounds can be narrowed in the file, not widened.
+
 ## Targets out of reach
 
 A target out of reach sets a planning alarm such as `PLAN_MOTION_TARGET_OUT_OF_WORKSPACE` or `PLAN_INVERSE_LIMIT`, and [`ptp`](../api/motion.md#ptp) raises [`DobotKinematicError`](../api/errors.md#dobotkinematicerror). A joint at its limit sets a `LIMIT_POS_J*` or `LIMIT_NEG_J*` alarm. See [Alarm bitmask](../protocol/alarms.md) and [Alarms and recovery](alarms.md).

@@ -10,7 +10,7 @@ Each row lists the ID in decimal and hexadecimal, the `CommandID` member, and th
 |-----|------|--------|-----------------|
 | 0   | 0x00 | `GET_DEVICE_SN`       | [`get_device_serial_number`](../api/magician.md#get_device_serial_number), [`is_dobot`](../api/discovery.md#is_dobot), [`discover`](../api/discovery.md#discover) |
 | 1   | 0x01 | `GET_SET_DEVICE_NAME` | [`get_device_name`](../api/magician.md#get_device_name), [`set_device_name`](../api/magician.md#set_device_name) |
-| 2   | 0x02 | `GET_DEVICE_VERSION`  | [`get_device_version`](../api/magician.md#get_device_version) |
+| 2   | 0x02 | `GET_DEVICE_VERSION`  | [`get_device_version`](../api/magician.md#get_device_version), [`is_dobot`](../api/discovery.md#is_dobot), [`discover`](../api/discovery.md#discover) |
 | 3   | 0x03 | `GET_SET_DEVICE_WITH_L` | [`set_device_withl`](../api/accessories.md#set_device_withl) |
 | 4   | 0x04 | `GET_DEVICE_TIME`     | - |
 | 5   | 0x05 | `GET_DEVICE_ID`       | - |
@@ -19,7 +19,7 @@ Each row lists the ID in decimal and hexadecimal, the `CommandID` member, and th
 
 | ID  | Hex  | Symbol | Magician method |
 |-----|------|--------|-----------------|
-| 10  | 0x0A | `GET_POSE`     | [`get_pose`](../api/motion.md#get_pose), [`start_pose_stream`](../api/pose-stream.md#start_pose_stream) |
+| 10  | 0x0A | `GET_POSE`     | [`get_pose`](../api/motion.md#get_pose), [`start_pose_stream`](../api/pose-stream.md#start_pose_stream), [`is_dobot`](../api/discovery.md#is_dobot), [`discover`](../api/discovery.md#discover) |
 | 11  | 0x0B | `RESET_POSE`   | - |
 | 12  | 0x0C | `GET_KINEMATICS` | - |
 | 13  | 0x0D | `GET_POSE_L`   | [`get_posel`](../api/accessories.md#get_posel) |
