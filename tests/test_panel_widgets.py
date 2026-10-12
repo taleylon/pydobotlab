@@ -216,6 +216,17 @@ def test_panel_adopts_the_arm_speed_and_follows_script_changes(application, monk
         simulator.stop_all()
 
 
+NO_MAGICIAN_NOTE = (
+    "No Dobot Magician devices were found.\nCheck the USB cable and power, then click Refresh."
+)
+
+
+def listed_rows(hub) -> list[str]:
+    """Texts of the hub's top-level rows."""
+    tree = hub._device_list
+    return [tree.topLevelItem(i).text(0) for i in range(tree.topLevelItemCount())]
+
+
 def test_hub_lists_ports_only_and_explains_permission_once(application, monkeypatch):
     from pydobotlab import DiscoveredDobot, Discovery, ProbeFailure
     from pydobotlab.panel.hub import HubWindow
@@ -225,11 +236,8 @@ def test_hub_lists_ports_only_and_explains_permission_once(application, monkeypa
     try:
         hub._worker.wait()
         hub.show_discovery_results([DiscoveredDobot(port="COM3", serial_number="DT1234567890")])
-        assert [hub._device_list.item(i).text() for i in range(hub._device_list.count())] == [
-            "COM3"
-        ]
+        assert listed_rows(hub) == ["COM3", "Other devices (0)"]
 
-        hub._device_list.clear()
         hub.show_discovery_results(
             [],
             [
@@ -238,11 +246,112 @@ def test_hub_lists_ports_only_and_explains_permission_once(application, monkeypa
                 ProbeFailure("/dev/ttyUSB0", "", "busy", "locked"),
             ],
         )
-        lines = [hub._device_list.item(i).text().strip() for i in range(hub._device_list.count())]
+        lines = listed_rows(hub)
+        assert lines[0] == NO_MAGICIAN_NOTE
         assert sum("Permission denied" in line for line in lines) == 1
         assert "/dev/ttyUSB0    port is busy" in lines
         assert not any("brltty" in line or "try " in line for line in lines)
     finally:
+        hub.close()
+
+
+@pytest.mark.parametrize("magician_found", [False, True])
+def test_hub_groups_other_devices_in_a_collapsed_list(application, monkeypatch, magician_found):
+    from pydobotlab import DiscoveredDobot, Discovery, ProbeFailure
+    from pydobotlab.panel.hub import HubWindow
+
+    monkeypatch.setattr(Discovery, "discover_with_diagnostics", staticmethod(lambda: ([], [])))
+    hub = HubWindow()
+    try:
+        hub._worker.wait()
+        devices = [DiscoveredDobot(port="/dev/ttyACM0", serial_number="DT1")] * magician_found
+        hub.show_discovery_results(
+            devices,
+            [
+                ProbeFailure("COM4", "Arduino Uno (COM4)", "no_reply", "'COM4' is not a Dobot"),
+                ProbeFailure("COM5", "", "no_reply", "'COM5' is not a Dobot Magician"),
+            ],
+        )
+        first_row = "/dev/ttyACM0" if magician_found else NO_MAGICIAN_NOTE
+        assert listed_rows(hub) == [first_row, "Other devices (2)"]
+        group = hub._device_list.topLevelItem(1)
+        assert [group.child(i).text(0) for i in range(group.childCount())] == [
+            "COM4    Arduino Uno",
+            "COM5",
+        ]
+        assert not group.isExpanded()
+        hub.toggle_group(group)  # what a click on the row does
+        assert group.isExpanded()
+
+        hub._device_list.setCurrentItem(group)
+        assert hub.selected_port() is None  # other devices cannot be opened
+    finally:
+        hub.close()
+
+
+def test_hub_and_panel_show_the_version(application, monkeypatch):
+    import serial
+    import serial.tools.list_ports
+
+    import pydobotlab.panel.panel as panel_module
+    import pydobotlab.simulator as simulator
+    from pydobotlab import Discovery, Dobot, __version__
+    from pydobotlab.panel.hub import HubWindow
+
+    monkeypatch.setattr(Discovery, "discover_with_diagnostics", staticmethod(lambda: ([], [])))
+    monkeypatch.setattr(serial, "Serial", serial.Serial)
+    monkeypatch.setattr(serial.tools.list_ports, "comports", serial.tools.list_ports.comports)
+    monkeypatch.setattr(simulator, "_INSTALLED", False)
+    simulator.install_simulator(arms=1)
+    monkeypatch.setattr(panel_module, "Dobot", lambda port: Dobot(port, via_broker=False))
+    hub = HubWindow()
+    panel = None
+    try:
+        hub._worker.wait()
+        panel = panel_module.ControlPanel("/dev/sim0")
+        for window in (hub, panel):
+            assert window._version_label.text() == f"pydobotlab v{__version__}"
+            window.statusBar().showMessage("a status message")
+            assert window._version_label.isVisibleTo(window)  # stays while messages show
+    finally:
+        if panel is not None:
+            panel.close()
+        hub.close()
+        simulator.stop_all()
+
+
+def test_hub_runs_one_scan_at_a_time(application, monkeypatch):
+    import threading
+    import time
+
+    from pydobotlab import Discovery
+    from pydobotlab.panel.hub import HubWindow
+
+    scans = []
+    scan_may_finish = threading.Event()
+
+    def scan():
+        scans.append(time.monotonic())
+        scan_may_finish.wait(5)
+        return [], []
+
+    monkeypatch.setattr(Discovery, "discover_with_diagnostics", staticmethod(scan))
+    hub = HubWindow()
+    try:
+        first_scan = hub._worker
+        hub.refresh()  # as when a panel closes during the startup scan
+        assert hub._worker is first_scan
+
+        scan_may_finish.set()
+        deadline = time.monotonic() + 5
+        while (hub._worker is not None or len(scans) < 2) and time.monotonic() < deadline:
+            application.processEvents()
+            time.sleep(0.01)
+
+        assert len(scans) == 2  # the requested scan ran after the first one
+        assert listed_rows(hub) == [NO_MAGICIAN_NOTE, "Other devices (0)"]
+    finally:
+        scan_may_finish.set()
         hub.close()
 
 

@@ -10,6 +10,7 @@ import serial
 import pydobotlab.discovery as discovery
 import pydobotlab.transport as transport_module
 from pydobotlab import (
+    CommandID,
     Dobot,
     DobotConnectionError,
     DobotPermissionError,
@@ -17,6 +18,7 @@ from pydobotlab import (
 )
 from pydobotlab.discovery import PortInfo
 from pydobotlab.permissions import PortPermissionProblem, describe_permission_problem
+from pydobotlab.protocol import Frame, pack_floats
 from pydobotlab.transport import SerialTransport, classify_open_error, close_open_transports
 
 GROUP_RW = 0o660
@@ -138,6 +140,77 @@ def test_discovery_reason_follows_exception_type(monkeypatch, error, reason):
     hits, failures = discovery.discover_with_diagnostics()
     assert hits == []
     assert [(failure.port, failure.reason) for failure in failures] == [("/dev/ttyACM0", reason)]
+
+
+def transport_answering(reply):
+    """A SerialTransport stand-in whose device answers each request with ``reply``."""
+
+    class AnsweringTransport:
+        def __init__(self, port, timeout):
+            self.port = port
+
+        def open(self):
+            pass
+
+        def close(self):
+            pass
+
+        def send_frame(self, cmd_id, ctrl, params=b""):
+            return reply(cmd_id, ctrl, params)
+
+    return AnsweringTransport
+
+
+MAGICIAN_REPLIES = {
+    CommandID.GET_DEVICE_SN: b"DT1234567890\x00",
+    CommandID.GET_DEVICE_VERSION: bytes((3, 7, 0)),
+    CommandID.GET_POSE: pack_floats(200.0, 0.0, 50.0, 0.0, 0.0, 30.0, 40.0, 0.0),
+}
+
+
+def magician_reply(cmd_id, ctrl, params):
+    return Frame(cmd_id, ctrl, MAGICIAN_REPLIES[cmd_id])
+
+
+def reply_differing_in(command_id, params):
+    """A device that answers like a Magician except for ``command_id``."""
+
+    def reply(cmd_id, ctrl, request_params):
+        if cmd_id == command_id:
+            return Frame(cmd_id, ctrl, params)
+        return magician_reply(cmd_id, ctrl, request_params)
+
+    return reply
+
+
+def test_a_magician_is_identified_with_its_serial_number(monkeypatch):
+    monkeypatch.setattr(discovery, "SerialTransport", transport_answering(magician_reply))
+    monkeypatch.setattr(discovery, "list_ports", lambda **kw: [PortInfo(port="COM3")])
+    hits, failures = discovery.discover_with_diagnostics()
+    assert [(hit.port, hit.serial_number) for hit in hits] == [("COM3", "DT1234567890")]
+    assert failures == []
+    assert discovery.is_dobot("COM3")
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        lambda cmd_id, ctrl, params: Frame(cmd_id, ctrl, params),  # echoes each request
+        lambda cmd_id, ctrl, params: Frame(21, 0, b"\x01"),  # answers another command
+        reply_differing_in(CommandID.GET_DEVICE_VERSION, b"\x03"),
+        reply_differing_in(CommandID.GET_POSE, pack_floats(1.0, 2.0)),
+        reply_differing_in(CommandID.GET_POSE, pack_floats(*[float("nan")] * 8)),
+    ],
+    ids=["echo", "other-command", "short-version", "short-pose", "pose-not-numbers"],
+)
+def test_other_devices_are_not_identified_as_a_magician(monkeypatch, reply):
+    monkeypatch.setattr(discovery, "SerialTransport", transport_answering(reply))
+    monkeypatch.setattr(discovery, "list_ports", lambda **kw: [PortInfo(port="COM5")])
+    hits, failures = discovery.discover_with_diagnostics()
+    assert hits == []
+    assert [(failure.port, failure.reason) for failure in failures] == [("COM5", "no_reply")]
+    assert "not a Dobot Magician" in failures[0].detail
+    assert not discovery.is_dobot("COM5")
 
 
 def test_auto_pick_reports_permission_problem(monkeypatch):

@@ -47,7 +47,7 @@ def user_directory(tmp_path, monkeypatch):
 
 def test_shipped_file_holds_every_setting():
     config = default_config()
-    assert set(config) == {"serial", "broker", "discovery", "panel", "simulator"}
+    assert set(config) == {"serial", "broker", "discovery", "panel", "simulator", "workspace"}
     assert (config["broker"]["host"], config["broker"]["port"]) == ("127.0.0.1", 8765)
     assert config["serial"]["baudrate"] == 115200
 
@@ -216,7 +216,30 @@ def test_discovery_probes_with_the_discovery_timeout(monkeypatch):
     assert RecordingTransport.timeouts == [0.07, 0.07, 0.2]
 
 
-def test_workspace_cannot_be_configured(tmp_path):
-    path = write_config(tmp_path, "[simulator]\nmax_radius_mm = 500.0\n")
-    with pytest.raises(DobotConfigError, match="unknown key 'max_radius_mm'"):
+# -- workspace bounds -----------------------------------------------------------------
+
+
+def test_workspace_holds_the_official_maximum_reach():
+    assert default_config()["workspace"]["max_radius_mm"] == 320.0
+
+
+def test_workspace_can_be_narrowed(tmp_path):
+    path = write_config(tmp_path, "[workspace]\nmin_radius_mm = 150\nz_max_mm = 100.0\n")
+    workspace = load_config(path)["workspace"]
+    assert (workspace["min_radius_mm"], workspace["z_max_mm"]) == (150, 100.0)
+
+
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        ("max_radius_mm = 400.0", "max_radius_mm must be at most 320.0"),
+        ("min_radius_mm = 10.0", "min_radius_mm must be at least 85.0"),
+        ("z_min_mm = -300.0", "z_min_mm must be at least -170.0"),
+        ("z_max_mm = 400.0", "z_max_mm must be at most 175.0"),
+        ("min_radius_mm = 250.0\nmax_radius_mm = 200.0", "min_radius_mm must be below"),
+    ],
+)
+def test_workspace_cannot_be_widened(tmp_path, text, message):
+    path = write_config(tmp_path, f"[workspace]\n{text}\n")
+    with pytest.raises(DobotConfigError, match=message):
         load_config(path)
