@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from pydobotlab import Dobot, DobotKinematicError, PTPMode
+from pydobotlab import Dobot, DobotKinematicError
 
 
 def main() -> int:
@@ -35,13 +35,13 @@ def main() -> int:
 
         # 1. Reachable: this works.
         print("Moving to (220, 0, 50)... ", end="", flush=True)
-        bot.move_to(220, 0, 50, 0, mode=PTPMode.MOVJ_XYZ)
+        bot.ptp(mode=1, x=220, y=0, z=50, r=0)  # MOVJ_XYZ
         print("OK")
 
-        # 2. Unreachable: way outside the workspace.
+        # 2. Unreachable: way outside the workspace. ptp raises at once.
         print("Moving to (500, 500, 0)... ", end="", flush=True)
         try:
-            bot.move_to(500, 500, 0, 0, mode=PTPMode.MOVL_XYZ, timeout=5)
+            bot.ptp(mode=2, x=500, y=500, z=0, r=0)  # MOVL_XYZ
         except DobotKinematicError as e:
             print(f"REJECTED - {type(e).__name__}: {e}")
             print(f"    active alarms: {e.alarms}")
@@ -49,13 +49,12 @@ def main() -> int:
             print("(unexpectedly succeeded - workspace bounds not enforced)")
             return 1
 
-        # 3. Recovery: clear the alarm, then continue.
+        # 3. Recovery: clear the alarm (raises if it comes back), then continue.
         print("\nCalling clear_alarm() to recover...")
         bot.clear_alarm()
-        assert not bot.get_alarms(), "alarms should be cleared"
 
         print("Moving to a reachable point (260, -50, 30)... ", end="", flush=True)
-        bot.move_to(260, -50, 30, 0, mode=PTPMode.MOVJ_XYZ)
+        bot.ptp(mode=1, x=260, y=-50, z=30, r=0)  # MOVJ_XYZ
         print("OK")
 
     print("\nDone - student can catch DobotKinematicError, call clear_alarm, retry.")

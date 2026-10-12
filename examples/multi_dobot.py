@@ -55,10 +55,9 @@ def per_arm(arm: Dobot, label: str) -> None:
         arm.clear_alarm()
         arm.set_home()
         arm.motion_params = (50.0, 50.0)
-        with arm.batch():
+        with arm.batch():  # runs and waits at the end of the block
             for x, y in [(200, -50), (200, 50), (250, 0)]:
                 arm.ptp(PTPMode.MOVL_XYZ, x, y, 0, 0)
-        arm.wait_idle(timeout=30)
         print(f"[{label}] done")
 
 
