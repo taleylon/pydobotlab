@@ -2,9 +2,10 @@
 
 Two headline widgets:
 
-* :class:`JogPad` - four buttons in a + cross pattern that emit
-  ``jog(JOGCmd)`` while held and ``stop()`` on release, so the panel can
-  call ``dobot.jog(cmd, mode)`` / ``dobot.jog_stop()``.
+* :class:`JogPad` - a round DobotLab-style joystick split into four labelled
+  segments. Holding a segment emits ``jog(JOGCmd)``; releasing emits
+  ``stop()``, so the panel can call ``dobot.jog(cmd, mode)`` /
+  ``dobot.jog_stop()``.
 * :class:`CoordReadout` - a vertical stack of (label, value) rows for one
   coordinate system. Used twice in the panel: once for ``X / Y / Z / R``
   next to the Cartesian jog pads, once for ``J1..J4`` next to the joint
@@ -13,46 +14,77 @@ Two headline widgets:
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QEvent, QPointF, QRectF, QSize, Qt, Signal
+from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPolygonF
 from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
-    QPushButton,
     QSizePolicy,
-    QVBoxLayout,
+    QWidget,
 )
 
 from pydobotlab.protocol import JOGCmd
 
+# Segment names. A pad uses exactly one of these two sets:
+#   diagonal - the disc is cut by an X, giving top / right / bottom / left
+#              wedges (the X/Y and Z/R pads);
+#   quadrant - the disc is cut by a +, giving four quarters (the J1/J2 and
+#              J3/J4 pads).
+DIAGONAL_SEGMENTS = ("top", "right", "bottom", "left")
+QUADRANT_SEGMENTS = ("top_left", "top_right", "bottom_left", "bottom_right")
 
-class JogButton(QPushButton):
-    """A round jog button that emits its associated :class:`JOGCmd` while held."""
+# Unit direction from the disc centre to each segment's label (y points down).
+SEGMENT_DIRECTIONS: dict[str, tuple[float, float]] = {
+    "top": (0, -1),
+    "right": (1, 0),
+    "bottom": (0, 1),
+    "left": (-1, 0),
+    "top_left": (-0.707, -0.707),
+    "top_right": (0.707, -0.707),
+    "bottom_left": (-0.707, 0.707),
+    "bottom_right": (0.707, 0.707),
+}
 
-    pressedCmd = Signal(int)  # emits JOGCmd on press
-    releasedCmd = Signal()  # emits on release (no payload)
-
-    def __init__(self, label: str, cmd: JOGCmd, *, small: bool = False, parent=None) -> None:
-        super().__init__(label, parent)
-        self.setObjectName("jogSmall" if small else "jog")
-        self._cmd = int(cmd)
-        # autoRepeat off - we want one press/release per click-and-hold cycle.
-        self.setAutoRepeat(False)
-        self.setFocusPolicy(Qt.NoFocus)
-        self.pressed.connect(self.emit_jog_command)
-        self.released.connect(self.releasedCmd.emit)
-
-    def emit_jog_command(self) -> None:
-        self.pressedCmd.emit(self._cmd)
+HUB_RADIUS_FRACTION = 0.28  # the inert centre circle, as a share of the disc radius
 
 
-class JogPad(QFrame):
-    """Four jog buttons in a + cross.
+def segment_at(offset_x: float, offset_y: float, segment_names: tuple[str, ...]) -> str:
+    """Segment containing the point ``(offset_x, offset_y)`` from the disc centre."""
+    if segment_names == DIAGONAL_SEGMENTS:
+        if abs(offset_x) > abs(offset_y):
+            return "right" if offset_x > 0 else "left"
+        return "bottom" if offset_y > 0 else "top"
+    vertical = "bottom" if offset_y > 0 else "top"
+    horizontal = "right" if offset_x > 0 else "left"
+    return f"{vertical}_{horizontal}"
 
-    Emits ``jog(int)`` while a button is held; emits ``stop()`` on release.
-    The four ``(label, JOGCmd)`` pairs go in (top, bottom, left, right) order.
+
+def segment_polygon(name: str, centre: QPointF, reach: float) -> QPolygonF:
+    """Region of ``name``, extended past the disc so it can be clipped to the circle."""
+    cx, cy = centre.x(), centre.y()
+    corners = {
+        "top": [(0, 0), (-1, -1), (1, -1)],
+        "bottom": [(0, 0), (-1, 1), (1, 1)],
+        "left": [(0, 0), (-1, -1), (-1, 1)],
+        "right": [(0, 0), (1, -1), (1, 1)],
+        "top_left": [(0, 0), (-1, 0), (-1, -1), (0, -1)],
+        "top_right": [(0, 0), (1, 0), (1, -1), (0, -1)],
+        "bottom_left": [(0, 0), (-1, 0), (-1, 1), (0, 1)],
+        "bottom_right": [(0, 0), (1, 0), (1, 1), (0, 1)],
+    }[name]
+    return QPolygonF([QPointF(cx + dx * reach, cy + dy * reach) for dx, dy in corners])
+
+
+class JogPad(QWidget):
+    """Round joystick with four labelled segments, like DobotLab's jog pads.
+
+    ``segments`` maps each segment name to ``(label, JOGCmd)``. Use the four
+    :data:`DIAGONAL_SEGMENTS` names or the four :data:`QUADRANT_SEGMENTS`
+    names. Emits ``jog(int)`` while a segment is held and ``stop()`` on
+    release.
     """
 
     jog = Signal(int)
@@ -61,45 +93,159 @@ class JogPad(QFrame):
     def __init__(
         self,
         title: str,
-        top: tuple[str, JOGCmd],
-        bottom: tuple[str, JOGCmd],
-        left: tuple[str, JOGCmd],
-        right: tuple[str, JOGCmd],
+        segments: dict[str, tuple[str, JOGCmd]],
         *,
         parent=None,
     ) -> None:
         super().__init__(parent)
-        self.setObjectName("card")
+        names = tuple(segments)
+        if set(names) == set(DIAGONAL_SEGMENTS):
+            self._segment_names = DIAGONAL_SEGMENTS
+        elif set(names) == set(QUADRANT_SEGMENTS):
+            self._segment_names = QUADRANT_SEGMENTS
+        else:
+            raise ValueError(
+                f"segments must be {DIAGONAL_SEGMENTS} or {QUADRANT_SEGMENTS}, got {names}"
+            )
+        self._segments = segments
+        self.setToolTip(title)
+        self.setMouseTracking(True)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.setMinimumSize(150, 150)
+        self._hovered: str | None = None
+        self._pressed: str | None = None
 
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(12, 8, 12, 12)
-        outer.setSpacing(6)
+    def sizeHint(self) -> QSize:
+        return QSize(180, 180)
 
-        title_label = QLabel(title)
-        title_label.setAlignment(Qt.AlignCenter)
-        title_label.setStyleSheet("color:#aab2c2; font-weight:600;")
-        outer.addWidget(title_label)
+    # -- geometry --------------------------------------------------------------
 
-        grid = QGridLayout()
-        grid.setSpacing(4)
-        grid.setContentsMargins(0, 0, 0, 0)
-        outer.addLayout(grid, stretch=1)
+    def disc(self) -> tuple[QPointF, float]:
+        radius = min(self.width(), self.height()) / 2 - 2
+        return QPointF(self.width() / 2, self.height() / 2), radius
 
-        for (label, cmd), (row, column) in zip(
-            [top, bottom, left, right],
-            [(0, 1), (2, 1), (1, 0), (1, 2)],
-            strict=True,
-        ):
-            button = JogButton(label, cmd)
-            button.pressedCmd.connect(self.jog)
-            button.releasedCmd.connect(self.stop)
-            grid.addWidget(button, row, column, alignment=Qt.AlignCenter)
+    def segment_under(self, position: QPointF) -> str | None:
+        """Segment at ``position``, or ``None`` outside the disc or on the centre hub."""
+        centre, radius = self.disc()
+        offset_x, offset_y = position.x() - centre.x(), position.y() - centre.y()
+        distance = (offset_x**2 + offset_y**2) ** 0.5
+        if distance > radius or distance < radius * HUB_RADIUS_FRACTION:
+            return None
+        return segment_at(offset_x, offset_y, self._segment_names)
 
-        # Empty centre cell to give the + shape some breathing room.
-        spacer = QLabel()
-        spacer.setMinimumSize(56, 56)
-        grid.addWidget(spacer, 1, 1)
+    # -- mouse -------------------------------------------------------------------
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() != Qt.LeftButton:
+            return
+        segment = self.segment_under(event.position())
+        if segment is None:
+            return
+        self._pressed = segment
+        self.jog.emit(int(self._segments[segment][1]))
+        self.update()
+
+    def mouseReleaseEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton:
+            self.release_pressed_segment()
+
+    def mouseMoveEvent(self, event) -> None:
+        hovered = self.segment_under(event.position())
+        if hovered != self._hovered:
+            self._hovered = hovered
+            self.update()
+
+    def leaveEvent(self, event) -> None:
+        self._hovered = None
+        self.update()
+
+    def release_pressed_segment(self) -> None:
+        if self._pressed is not None:
+            self._pressed = None
+            self.stop.emit()
+            self.update()
+
+    def changeEvent(self, event) -> None:
+        # Disabled mid-press (alarm lock, disconnect): the release will never
+        # arrive, so stop the jog now.
+        if event.type() == QEvent.EnabledChange and not self.isEnabled():
+            self.release_pressed_segment()
+        super().changeEvent(event)
+
+    # -- painting ----------------------------------------------------------------
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        centre, radius = self.disc()
+        enabled = self.isEnabled()
+
+        disc_path = QPainterPath()
+        disc_path.addEllipse(centre, radius, radius)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor("#2b3039" if enabled else "#22262d"))
+        painter.drawPath(disc_path)
+
+        for name in (self._pressed, self._hovered):
+            if name is None or not enabled:
+                continue
+            wedge = QPainterPath()
+            wedge.addPolygon(segment_polygon(name, centre, radius * 2))
+            wedge.closeSubpath()
+            painter.setBrush(QColor("#1a3a55" if name == self._pressed else "#343a46"))
+            painter.drawPath(wedge.intersected(disc_path))
+
+        # Dividers between the segments.
+        painter.setPen(QPen(QColor("#1b1e24"), 2))
+        reach = radius
+        if self._segment_names == DIAGONAL_SEGMENTS:
+            offset = reach * 0.7071
+            painter.drawLine(
+                QPointF(centre.x() - offset, centre.y() - offset),
+                QPointF(centre.x() + offset, centre.y() + offset),
+            )
+            painter.drawLine(
+                QPointF(centre.x() - offset, centre.y() + offset),
+                QPointF(centre.x() + offset, centre.y() - offset),
+            )
+        else:
+            painter.drawLine(
+                QPointF(centre.x() - reach, centre.y()), QPointF(centre.x() + reach, centre.y())
+            )
+            painter.drawLine(
+                QPointF(centre.x(), centre.y() - reach), QPointF(centre.x(), centre.y() + reach)
+            )
+
+        painter.setBrush(Qt.NoBrush)
+        painter.setPen(QPen(QColor("#1b1e24"), 2))
+        painter.drawEllipse(centre, radius, radius)
+
+        hub_radius = radius * HUB_RADIUS_FRACTION
+        painter.setPen(QPen(QColor("#1b1e24"), 1))
+        painter.setBrush(QColor("#23272f"))
+        painter.drawEllipse(centre, hub_radius, hub_radius)
+
+        font = QFont(self.font())
+        font.setPointSizeF(max(8.0, radius / 11))
+        font.setBold(True)
+        painter.setFont(font)
+        for name, (label, _command) in self._segments.items():
+            direction_x, direction_y = SEGMENT_DIRECTIONS[name]
+            label_centre = QPointF(
+                centre.x() + direction_x * radius * 0.64, centre.y() + direction_y * radius * 0.64
+            )
+            if not enabled:
+                painter.setPen(QColor("#555a66"))
+            elif name == self._pressed:
+                painter.setPen(QColor("#ffffff"))
+            else:
+                painter.setPen(QColor("#aab2c2"))
+            painter.drawText(
+                QRectF(label_centre.x() - 30, label_centre.y() - 12, 60, 24),
+                Qt.AlignCenter,
+                label,
+            )
+        painter.end()
 
 
 class CoordReadout(QFrame):

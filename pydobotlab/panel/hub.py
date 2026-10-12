@@ -1,7 +1,7 @@
-"""HubWindow - small device picker that spawns per-arm ControlPanel windows.
+"""Device hub for launching a separate ControlPanel window for each arm.
 
-Closing the hub closes the whole app; closing a panel only disconnects that
-arm and lets the user re-open it from the hub later.
+Closing the hub exits the application. Closing an individual panel disconnects
+only its arm and allows the panel to be reopened from the hub.
 """
 
 from __future__ import annotations
@@ -122,12 +122,21 @@ class HubWindow(QMainWindow):
                 header.setFlags(Qt.NoItemFlags)
                 header.setForeground(Qt.gray)
                 self._device_list.addItem(header)
+                # Permission failures share one cause (e.g. missing dialout
+                # group), so explain it once instead of once per port.
+                permission_failures = [f for f in failures if f.reason == "permission"]
+                if permission_failures:
+                    ports = ", ".join(f.port for f in permission_failures)
+                    item = QListWidgetItem(f"   {permission_failures[0].detail}")
+                    item.setFlags(Qt.NoItemFlags)
+                    item.setForeground(Qt.gray)
+                    item.setToolTip(f"Affected ports: {ports}")
+                    self._device_list.addItem(item)
                 for failure in failures:
+                    if failure.reason == "permission":
+                        continue
                     hint = {
-                        "permission": "permission denied - try "
-                        "'sudo usermod -aG dialout $USER' then log out & back in",
-                        "busy": "port busy - close DobotStudio, another panel, "
-                        "or stop brltty: 'sudo systemctl stop brltty'",
+                        "busy": "port is busy",
                         "no_reply": "opened but didn't answer (wrong device, or arm asleep)",
                         "other": "couldn't open",
                     }.get(failure.reason, failure.reason)
@@ -147,14 +156,14 @@ class HubWindow(QMainWindow):
                 self.statusBar().showMessage("no Dobots found", 3000)
             return
         for device in devices:
-            label = f"{device.port}    serial: {device.serial_number or '?'}"
+            label = device.port
             item = QListWidgetItem(label)
             item.setData(Qt.UserRole, device.port)
             if device.port in self._panels and self._panels[device.port].isVisible():
-                item.setText(label + "    [panel open]")
+                item.setText(f"{label}    [panel open]")
                 item.setForeground(Qt.gray)
             elif is_port_claimed(device.port):
-                item.setText(label + "    [in use elsewhere]")
+                item.setText(f"{label}    [in use elsewhere]")
                 item.setForeground(Qt.gray)
             self._device_list.addItem(item)
         self.statusBar().showMessage(f"{len(devices)} device(s) found", 3000)
