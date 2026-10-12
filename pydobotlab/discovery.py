@@ -10,10 +10,10 @@ both for callers who prefer the class-method style:
 * :func:`list_ports` enumerates serial ports the OS sees and flags ones whose
   USB VID/PID matches a known Dobot adapter. Fast, side-effect free, but a
   USB-serial dongle for *something else* could also match.
-* :func:`discover` opens each candidate, sends ``GetDeviceSN`` and waits for
-  a response. Slower but authoritative - anything in the result really is a
-  Dobot, and the serial number lets you pin a particular arm to a particular
-  variable across sessions.
+* :func:`discover` opens each candidate and identifies it with
+  :func:`identify_magician`. Slower but authoritative - anything in the result
+  answered as a Dobot Magician, and the serial number lets you pin a
+  particular arm to a particular variable across sessions.
 
 USB IDs
 ~~~~~~~
@@ -27,12 +27,19 @@ hardware revision uses a different adapter::
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable
 from dataclasses import dataclass
 
 from .commands import CommandID
 from .config import get_config
-from .errors import DobotConnectionError, DobotPermissionError, DobotPortInUseError
+from .errors import (
+    DobotConnectionError,
+    DobotPermissionError,
+    DobotPortInUseError,
+    DobotProtocolError,
+)
+from .protocol import Frame, unpack_floats
 from .transport import SerialTransport, is_port_claimed
 
 # Verified VID/PID pairs that have been observed shipping with the Dobot
@@ -113,12 +120,47 @@ def list_ports(*, only_known_adapters: bool = False) -> list[PortInfo]:
     return ports
 
 
-def is_dobot(port: str, *, timeout: float | None = None) -> bool:
-    """Quickly probe ``port`` to see whether a Dobot answers.
+def request_as_magician(
+    transport: SerialTransport, command_id: CommandID, minimum_length: int, what: str
+) -> Frame:
+    """Send the read request ``command_id``; raise unless the reply has the Magician's format."""
+    reply = transport.send_frame(command_id, 0)
+    if reply.cmd_id != command_id or len(reply.params) < minimum_length:
+        raise DobotProtocolError(
+            f"{transport.port!r} is not a Dobot Magician: {what} request not answered "
+            f"as specified (command {reply.cmd_id}, {len(reply.params)} parameter bytes)"
+        )
+    return reply
 
-    Sends ``GetDeviceSN`` (cmd ID 0) and returns ``True`` if a well-formed
-    response comes back inside ``timeout`` seconds (default: the configured
-    value).
+
+def identify_magician(transport: SerialTransport) -> str:
+    """Return the serial number of the Dobot Magician on ``transport``.
+
+    The protocol has no command that names the model, so the device is
+    identified by its replies to three read requests, in the formats of the
+    Communication Protocol V1.1.5: ``GetDeviceSN`` (command ID 0, the serial
+    number; Table 6), ``GetDeviceVersion`` (command ID 2, three version bytes;
+    Table 12), and ``GetPose`` (command ID 10, eight finite floats: X, Y, Z, R,
+    and the four joint angles; Table 22). A device that echoes the request
+    fails the second check. The requests do not move the arm or change its
+    state. Raises :class:`DobotProtocolError` for any other reply.
+    """
+    serial_reply = request_as_magician(transport, CommandID.GET_DEVICE_SN, 0, "serial number")
+    request_as_magician(transport, CommandID.GET_DEVICE_VERSION, 3, "version")
+    pose_reply = request_as_magician(transport, CommandID.GET_POSE, 32, "pose")
+    if not all(math.isfinite(value) for value in unpack_floats(pose_reply.params[:32])):
+        raise DobotProtocolError(
+            f"{transport.port!r} is not a Dobot Magician: pose request answered with "
+            "values that are not numbers"
+        )
+    return serial_reply.params.rstrip(b"\x00").decode("ascii", errors="replace")
+
+
+def is_dobot(port: str, *, timeout: float | None = None) -> bool:
+    """Quickly probe ``port`` to see whether a Dobot Magician answers.
+
+    Returns ``True`` if :func:`identify_magician` accepts the replies within
+    ``timeout`` seconds per reply (default: the configured value).
     """
     if timeout is None:
         timeout = get_config()["discovery"]["probe_timeout"]
@@ -132,7 +174,7 @@ def is_dobot(port: str, *, timeout: float | None = None) -> bool:
         return False
     try:
         try:
-            transport.send_frame(CommandID.GET_DEVICE_SN, 0)
+            identify_magician(transport)
             return True
         except Exception:
             return False
@@ -153,7 +195,7 @@ class ProbeFailure:
 
     port: str
     description: str
-    reason: str  # short label: "permission", "busy", "no_reply", "other"
+    reason: str  # "permission", "busy", "no_reply" (not a Dobot Magician), "other"
     detail: str  # full error message
 
 
@@ -235,8 +277,7 @@ def discover_with_diagnostics(
         # Port opened; now probe.
         try:
             try:
-                frame = transport.send_frame(CommandID.GET_DEVICE_SN, 0)
-                serial_number = frame.params.rstrip(b"\x00").decode("ascii", errors="replace")
+                serial_number = identify_magician(transport)
                 found.append(
                     DiscoveredDobot(
                         port=info.port,
@@ -278,7 +319,8 @@ def find_free_port(*, only_known_adapters: bool = False) -> str | None:
     """Return the first available Dobot port, or ``None`` if there is none.
 
     "Available" means: enumerated by the OS, not currently held by any other
-    :class:`Dobot` instance in this process, and answering to ``GetDeviceSN``.
+    :class:`Dobot` instance in this process, and identified as a Dobot Magician
+    by :func:`identify_magician`.
     """
     devices = discover(only_known_adapters=only_known_adapters)
     return devices[0].port if devices else None
