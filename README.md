@@ -1,27 +1,26 @@
 # pydobotlab
 
-Python control for the **Dobot Magician**, with full coverage of the 28 Python
-API entries in the [official DobotLab Magician manual](https://cdn.release.dobot.cc/dobotlab-doc/dobotlab/coding-manual-en/20260205/Dobot%20Magician/Dobot%20Magician.html).
-Use the documented function names and arguments for motion, I/O, sensors,
-end-effectors, the slideway, and the conveyor.
+This project was created out of necessity as an alternative to the heavy DobotLab software officially provided by Dobot. It is designed specifically for the **Dobot Magician** and provides full coverage of the 28 Python API entries documented in the [official DobotLab Magician manual](https://cdn.release.dobot.cc/dobotlab-doc/dobotlab/coding-manual-en/20260205/Dobot%20Magician/Dobot%20Magician.html).
+It uses the documented function names and arguments for motion, I/O, sensors, end effectors, the slideway, and the conveyor. It runs on Windows and Linux (tested on Ubuntu 24 and 26), and may also run on macOS, although macOS has not yet been tested.
 
-All ten `ptp` modes are supported. Extended control adds `move_to` with waiting,
-timeouts, and alarm handling, command batching, and live pose streaming. Run Python scripts
-and the optional desktop control panel separately or in parallel. A simulator
-supports working without hardware.
+The official DobotLab software, which is implemented with compiled DLLs, is heavy and creates an unfriendly barrier to accessing the robot for educational purposes. This project implements the available commands directly in pure Python using the original protocol ([Dobot Communication Protocol V1.1.5](https://taleylon.github.io/pydobotlab/Dobot-Communication-Protocol-V1.1.5.pdf)). Because the robot connects via USB, the project can run on any operating system that supports Python and can communicate with the robot.
 
-Communicates over serial using `pyserial` and the
-[Dobot Communication Protocol V1.1.5](https://download.dobot.cc/product-manual/dobot-magician/pdf/en/Dobot-Communication-Protocol-V1.1.5.pdf);
-no vendor DLL or DobotStudio installation is required.
+This project uses `pyserial` to communicate with the robot, so no vendor DLL or DobotStudio installation is required. Arm specifications and workspace information are available in the [Dobot Magician V2 User Guide (DobotLab-based) V2.3.1](https://taleylon.github.io/pydobotlab/Dobot-Magician-V2-User-Guide-V2.3.1.pdf).
+
+In addition, this project:
+- Provides a Qt-based panel that mimics the DobotLab control panel and operates without interfering with other programs communicating with the robot.
+- Supports communication with one robot **or more**, allowing several robots to be controlled from a single workstation.
+- Implements a simulator that can be used to test the robot's behavior without having one connected.
 
 **[Documentation & homepage](https://taleylon.github.io/pydobotlab/)** ·
 [API reference](https://taleylon.github.io/pydobotlab/api/overview/) ·
 [GitHub](https://github.com/taleylon/pydobotlab) ·
+[Changelog](https://github.com/taleylon/pydobotlab/blob/main/CHANGELOG.md) ·
 [Report an issue](https://github.com/taleylon/pydobotlab/issues)
 
 ## Installation
 
-Requires **Python 3.10 or newer**. Install in a virtual environment:
+Requires **Python 3.11 or newer**. Install in a virtual environment:
 
 ```bash
 python -m pip install pydobotlab
@@ -34,8 +33,9 @@ python -m pip install "pydobotlab[gui]"
 pydobotlab-panel
 ```
 
-The base library requires only `pyserial`; Qt is installed only with the
-`gui` extra. See the [installation guide](https://taleylon.github.io/pydobotlab/getting-started/install/)
+The base library requires only `pyserial`; Qt is
+installed only with the `gui` extra. Default settings are read from a per-user
+[configuration file](https://taleylon.github.io/pydobotlab/api/config/). See the [installation guide](https://taleylon.github.io/pydobotlab/getting-started/install/)
 for virtual environments, Windows drivers, and Linux serial-port permissions.
 The project has been used on Ubuntu and Windows; macOS hardware has not been verified.
 
@@ -44,13 +44,12 @@ The project has been used on Ubuntu and Windows; macOS hardware has not been ver
 With the arm connected and its workspace clear:
 
 ```python
-from pydobotlab import Magician, PTPMode
+from pydobotlab import Magician
 
 with Magician() as robot:  # auto-discover; or specify "/dev/ttyUSB0" / "COM3"
     robot.clear_alarm()
     robot.set_home()
-    command_index = robot.ptp(mode=PTPMode.MOVJ_XYZ, x=220, y=0, z=50, r=0)
-    robot.wait_for(command_index)
+    robot.ptp(mode=1, x=220, y=0, z=50, r=0)  # MOVJ_XYZ; returns when the arm arrives
     pose = robot.get_pose()
     print(pose)
 ```
@@ -68,12 +67,16 @@ pose. Access individual values with `pose.x`, `pose.y`, `pose.z`, `pose.r`, or
 `Dobot` is also available as an alias for `Magician`. The documented DobotLab
 method names and parameters are preserved for existing scripts.
 
-Queued commands such as `ptp` return a queue index; use `wait_for` to wait for
-completion. `move_to` combines motion and waiting in one call:
+As in DobotLab, `ptp` and the other commands return `True` once the arm has
+executed them, so each command starts after the previous one has ended. When the
+arm reports an alarm, such as an unreachable target, the command raises an
+exception that names the alarm and its fix, and the program stops.
 
 ```python
 with Magician() as robot:
-    robot.move_to(220, 0, 50, r=0, mode=PTPMode.MOVL_XYZ, timeout=30)
+    robot.ptp(mode=1, x=220, y=0, z=50, r=0)  # MOVJ_XYZ
+    robot.ptp(mode=2, x=220, y=40, z=50, r=0)  # MOVL_XYZ
+    robot.set_endeffector_suctioncup(enable=True, on=True)
 ```
 
 See [DobotLab compatibility](https://taleylon.github.io/pydobotlab/api/dobotlab/)
@@ -94,7 +97,7 @@ from pydobotlab.simulator import install_simulator, stop_all
 install_simulator(arms=1)
 try:
     with Magician("/dev/sim0", via_broker=False) as robot:
-        robot.move_to(220, 0, 50)
+        robot.ptp(mode=1, x=220, y=0, z=50, r=0)  # MOVJ_XYZ
         print(robot.get_pose())
 finally:
     stop_all()
@@ -119,4 +122,7 @@ control panel, broker, and wire protocol.
 
 ## License
 
-MIT. Maintained by Tal Eylon, <taleylon1@gmail.com>.
+MIT. 
+
+
+_Maintained by Tal Eylon, <taleylon1@gmail.com>._
