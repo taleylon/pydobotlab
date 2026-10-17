@@ -23,25 +23,26 @@ In addition, this project:
 Requires **Python 3.11 or newer**. Install in a virtual environment:
 
 ```bash
-python -m pip install pydobotlab
-```
-
-For the optional PySide6 desktop panel:
-
-```bash
 python -m pip install "pydobotlab[gui]"
-pydobotlab-panel
 ```
 
-The base library requires only `pyserial`; Qt is
-installed only with the `gui` extra. Default settings are read from a per-user
+The `gui` extra installs the PySide6 control panel, `pydobotlab-panel`, and this  is the highly recommended setting: scripts connect through the control panel by default. The base library alone
+(`python -m pip install pydobotlab`) requires only `pyserial`; scripts then open
+the serial port directly. Default settings are read from a per-user
 [configuration file](https://taleylon.github.io/pydobotlab/api/config/). See the [installation guide](https://taleylon.github.io/pydobotlab/getting-started/install/)
 for virtual environments, Windows drivers, and Linux serial-port permissions.
 The project has been used on Ubuntu and Windows; macOS hardware has not been verified.
 
 ## Quick start
 
-With the arm connected and its workspace clear:
+With the arm connected and its workspace clear, start the control panel and keep
+it running while scripts run:
+
+```bash
+pydobotlab-panel
+```
+
+Then run a script; it connects through the panel:
 
 ```python
 from pydobotlab import Magician
