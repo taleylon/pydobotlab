@@ -181,6 +181,7 @@ class Magician:
         *,
         auto_start_queue: bool = True,
         only_known_adapters: bool = False,
+        require_panel: bool = True,
         via_broker: bool | str = "auto",
         broker_host: str | None = None,
         broker_port: int | None = None,
@@ -194,13 +195,19 @@ class Magician:
             Print a one-line "Connected to <port>" / "Failed to connect: ..."
             message from :meth:`connect`. Set ``False`` to stay silent.
 
+        ``require_panel``:
+            - ``True`` (default) - connect through the control panel
+              (``pydobotlab-panel``), that is through its
+              :class:`pydobotlab.broker.DobotBroker`; raise if it is not running.
+              The panel and the script then share the arm.
+            - ``False`` - connect through the panel when it is running,
+              otherwise open the serial port directly.
+
         ``via_broker``:
-            - ``"auto"`` (default) - at connect time, probe localhost for a
-              running :class:`pydobotlab.broker.DobotBroker` and route through
-              it if reachable. Otherwise open the serial port directly. This
-              lets the control-panel GUI and a Python script share an arm.
+            - ``"auto"`` (default) - follow ``require_panel``.
             - ``True`` - require the broker; raise if unreachable.
-            - ``False`` - never use the broker (always direct serial).
+            - ``False`` - never use the broker (always direct serial),
+              whatever ``require_panel`` says.
         """
         config = get_config()
         self._explicit_port = port
@@ -208,6 +215,7 @@ class Magician:
         self._timeout = config["serial"]["timeout"] if timeout is None else timeout
         self._auto_start_queue = auto_start_queue
         self._only_known_adapters = only_known_adapters
+        self._require_panel = require_panel
         self._via_broker = via_broker
         self._broker_host = config["broker"]["host"] if broker_host is None else broker_host
         self._broker_port = config["broker"]["port"] if broker_port is None else broker_port
@@ -222,9 +230,10 @@ class Magician:
     def connect(self) -> None:
         """Resolve the port (auto-pick if unset), open the line, prep the queue.
 
-        If a :class:`pydobotlab.broker.DobotBroker` is reachable on localhost
-        (the panel runs one), route through it instead of opening the serial
-        port directly. Override with ``via_broker=False``.
+        Connects through the control panel, which must be running unless
+        ``require_panel=False`` was passed to the constructor. With
+        ``require_panel=False``, opens the serial port directly when the panel
+        is not running.
 
         Prints one line saying which port connected, or why it failed (the
         exception is still raised). Pass ``verbose=False`` to the constructor
@@ -262,6 +271,10 @@ class Magician:
                         f"via_broker=True but no broker reachable at "
                         f"{self._broker_host}:{self._broker_port}"
                     )
+                use_broker = True
+            elif self._via_broker == "auto" and self._require_panel:
+                if not is_broker_reachable(self._broker_host, self._broker_port):
+                    raise DobotConnectionError(get_config()["messages"]["panel_not_running"])
                 use_broker = True
             elif self._via_broker == "auto" and is_broker_reachable(
                 self._broker_host, self._broker_port

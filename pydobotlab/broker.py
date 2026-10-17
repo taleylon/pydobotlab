@@ -187,6 +187,11 @@ class DobotBroker:
         with self._transports_lock:
             return sorted(self._transports.keys())
 
+    def client_count(self) -> int:
+        """Number of clients connected to an arm through the broker."""
+        with self._transports_lock:
+            return sum(self._client_counts.values())
+
     # -- client handling -----------------------------------------------------
 
     def _handle_client(self, connection: socket.socket) -> None:

@@ -264,9 +264,8 @@ class SerialTransport:
 class BrokerTransport:
     """Talks to a :class:`pydobotlab.broker.DobotBroker` over TCP.
 
-    Used by :class:`Dobot` automatically when a broker is reachable; the
-    student's code path is identical whether the panel is running (broker
-    on) or not (direct serial).
+    Used by :class:`Dobot` when the control panel, which runs the broker, is
+    running. The script's code is the same as with a direct serial connection.
     """
 
     def __init__(
@@ -365,8 +364,6 @@ class BrokerTransport:
                 raise DobotTimeoutError(f"broker timeout on {self.port!r}") from error
             except OSError as error:
                 self._drop_socket()
-                raise DobotConnectionError(
-                    f"lost the connection to {self.port!r} through the panel "
-                    f"(was the panel closed?): {error}"
-                ) from error
+                message = get_config()["messages"]["panel_connection_lost"]
+                raise DobotConnectionError(message.format(port=self.port, error=error)) from error
         return unpack(response)
