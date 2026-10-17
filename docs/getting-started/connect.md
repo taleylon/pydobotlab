@@ -6,7 +6,7 @@ Start the [control panel](../panel/running.md) before the script, and keep it ru
 pydobotlab-panel
 ```
 
-`Magician` connects through the panel, so the panel and the script control the same arm. When the panel is not running, `connect` raises [`DobotConnectionError`](../api/errors.md#dobotconnectionerror). See [Running scripts](../panel/running.md#scripts).
+`Magician` connects through the panel, so the panel and the script control the same arm. When the control panel is installed and not running, `connect` raises [`DobotConnectionError`](../api/errors.md#dobotconnectionerror). See [Running scripts](../panel/running.md#scripts).
 
 ## Automatic port selection
 
@@ -69,7 +69,7 @@ right.join()
 
 ## Without the control panel
 
-With `require_panel=False`, `Magician` connects through the panel when it is running and opens the serial port directly otherwise:
+When the control panel is not installed, `Magician` connects through the panel when it is running and opens the serial port directly otherwise. With the panel installed, `require_panel=False` does the same:
 
 ```python
 with Magician(require_panel=False) as bot:

@@ -24,7 +24,7 @@ python -m venv .venv
 python -m pip install "pydobotlab[gui]"
 ```
 
-The `gui` extra installs the control panel, `pydobotlab-panel`. Scripts connect through the control panel by default. To use pydobotlab without the panel, install the base package and create [`Magician`](../api/magician.md#magician) with `require_panel=False`:
+The `gui` extra installs the control panel, `pydobotlab-panel`, and is recommended: scripts connect through the control panel by default. Without the panel, install the base package; scripts then open the serial port directly:
 
 ```bash
 python -m pip install pydobotlab
