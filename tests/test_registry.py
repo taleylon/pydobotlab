@@ -178,7 +178,7 @@ def test_auto_pick_raises_clean_error_when_no_dobot_found(monkeypatch):
 
     monkeypatch.setattr(device_mod, "find_free_port", lambda **kw: None)
 
-    bot = Dobot()
+    bot = Dobot(via_broker=False)
     with pytest.raises(DobotConnectionError):
         bot.connect()
 
