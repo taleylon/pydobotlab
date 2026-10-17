@@ -14,4 +14,4 @@ PyPI-Recovery-Codes-*.txt
 CONTRIBUTING.md
 settings/*
 /to_check.md
-/to_check.ipynb
+/to_check*.ipynb
