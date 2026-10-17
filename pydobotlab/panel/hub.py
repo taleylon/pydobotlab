@@ -1,7 +1,8 @@
 """Device hub for launching a separate ControlPanel window for each arm.
 
-Closing the hub exits the application. Closing an individual panel disconnects
-only its arm and allows the panel to be reopened from the hub.
+Closing the hub exits the application, after asking when scripts are connected
+through it. Closing an individual panel disconnects only its arm and allows the
+panel to be reopened from the hub.
 """
 
 from __future__ import annotations
@@ -22,10 +23,14 @@ from PySide6.QtWidgets import (
 )
 
 from pydobotlab import Discovery
+from pydobotlab.broker import DobotBroker
 from pydobotlab.transport import is_port_claimed
 
 from .panel import ControlPanel
+from .panel_config import PANEL_CONFIG
 from .widgets import version_label
+
+HUB_TEXT = PANEL_CONFIG["hub"]
 
 
 class DiscoveryWorker(QThread):
@@ -51,12 +56,15 @@ class DiscoveryWorker(QThread):
 class HubWindow(QMainWindow):
     """Lists discovered Dobot Magicians; clicking 'Open' spawns a ControlPanel."""
 
-    def __init__(self, parent=None, *, developer: bool = False) -> None:
+    def __init__(
+        self, parent=None, *, developer: bool = False, broker: DobotBroker | None = None
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("pydobotlab - devices")
         self.resize(560, 380)
 
         self._developer = developer  # show ports; passed on to each control panel
+        self._broker = broker  # the broker this app started and stops on quit, if any
         self._panels: dict[str, ControlPanel] = {}  # port -> panel
         self._numbers: dict[str, int] = {}  # port -> number in "Dobot Magician <number>"
         self._worker: DiscoveryWorker | None = None  # the running scan, if any
@@ -203,9 +211,7 @@ class HubWindow(QMainWindow):
             for failure in open_failures:
                 if failure.reason == "permission":
                     continue
-                hint = {"busy": "port is busy", "other": "couldn't open"}.get(
-                    failure.reason, failure.reason
-                )
+                hint = HUB_TEXT["port_problems"].get(failure.reason, failure.reason)
                 self.add_note(f"{failure.port}    {hint}", failure.detail)
 
         separator = QTreeWidgetItem()
@@ -293,7 +299,32 @@ class HubWindow(QMainWindow):
 
     # ---- Hub close = quit app ---------------------------------------------
 
+    def script_count(self) -> int:
+        """Scripts connected to an arm through this app's broker."""
+        if self._broker is None:
+            return 0
+        # Each connected panel window holds one broker connection; the other
+        # clients are scripts.
+        panel_count = sum(1 for panel in self._panels.values() if panel.has_open_connection)
+        return max(0, self._broker.client_count() - panel_count)
+
+    def confirm_quit(self, script_count: int) -> bool:
+        dialog = HUB_TEXT["quit_dialog"]
+        text = dialog["one_script"] if script_count == 1 else dialog["several_scripts"]
+        answer = QMessageBox.question(
+            self,
+            dialog["title"],
+            text.format(count=script_count),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        return answer == QMessageBox.Yes
+
     def closeEvent(self, event) -> None:
+        script_count = self.script_count()
+        if script_count and not self.confirm_quit(script_count):
+            event.ignore()
+            return
         for panel in list(self._panels.values()):
             panel.close()
         event.accept()

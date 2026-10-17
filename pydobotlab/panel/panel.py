@@ -149,7 +149,10 @@ class ControlPanel(QMainWindow):
         self._label = f"{name}  -  {port}" if developer else name
         self.setWindowTitle(self._label)
         self.resize(880, 760)
-        self._bot = Dobot(port)
+        # require_panel=False: this window is part of the panel. Without
+        # auto_start_queue, opening or closing the window does not clear the
+        # arm's queue, so a script's queued moves are not cleared out.
+        self._bot = Dobot(port, require_panel=False, auto_start_queue=False)
         self._streamer: PoseStreamer | None = None
         self._home_worker: HomeWorker | None = None
         self._connected: bool = False
@@ -344,9 +347,15 @@ class ControlPanel(QMainWindow):
 
     # ---- Connection lifecycle ----------------------------------------------
 
+    @property
+    def has_open_connection(self) -> bool:
+        """The window's connection to its arm is open."""
+        return self._bot.is_open
+
     def connect_to_arm(self) -> None:
         try:
             self._bot.connect()
+            self._bot.start_queue()
         except DobotConnectionError as error:
             QMessageBox.critical(
                 self, "Connection failed", f"Could not open {self._label}:\n{error}"
@@ -607,6 +616,7 @@ class ControlPanel(QMainWindow):
             except Exception:
                 pass
             self._bot.connect()
+            self._bot.start_queue()
         except Exception as error:
             self.statusBar().showMessage(f"Reconnect failed: {error}", 5000)
             self._reconnect_button.setEnabled(True)

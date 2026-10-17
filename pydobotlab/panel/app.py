@@ -101,7 +101,9 @@ def main(argv: list[str] | None = None) -> int:
     app.setOrganizationName("pydobotlab")
     app.setStyleSheet(load_stylesheet())
 
-    hub = HubWindow(developer=arguments.dev)
+    # Quitting stops the broker only if this app started it, so only then
+    # does the hub ask before quitting while scripts are connected.
+    hub = HubWindow(developer=arguments.dev, broker=broker if started_here else None)
     if arguments.simulator:
         hub.setWindowTitle(hub.windowTitle() + "  (simulator)")
     hub.show()

@@ -1,6 +1,18 @@
-# Constants of the pydobotlab control panel: the alarm text.
+# Constants of the pydobotlab control panel: hub text and alarm text.
 # Read by panel_config.py. Per-user settings are in pydobotlab/config.toml.
 # Alarm codes and names: docs/Dobot-Magician-ALARM-Description.pdf.
+
+# Ports in the device list that could not be opened, by reason.
+[hub.port_problems]
+busy = "port is busy: close the script or program using it, then Refresh"
+other = "couldn't open"
+
+# Asked before quitting while scripts are connected through the panel.
+# {count} is the number of scripts.
+[hub.quit_dialog]
+title = "Scripts connected"
+one_script = "1 script is connected to an arm through the control panel.\nQuitting disconnects it from the arm.\n\nQuit anyway?"
+several_scripts = "{count} scripts are connected to an arm through the control panel.\nQuitting disconnects them from the arm.\n\nQuit anyway?"
 
 [alarm_text]
 # Joint names in alarm messages, for joints 1 to 4.
