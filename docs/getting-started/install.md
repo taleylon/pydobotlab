@@ -21,13 +21,13 @@ python -m venv .venv
 ## Install
 
 ```bash
-python -m pip install pydobotlab
+python -m pip install "pydobotlab[gui]"
 ```
 
-To use the control panel (`pydobotlab-panel`), install the `gui` extra:
+The `gui` extra installs the control panel, `pydobotlab-panel`. Scripts connect through the control panel by default. To use pydobotlab without the panel, install the base package and create [`Magician`](../api/magician.md#magician) with `require_panel=False`:
 
 ```bash
-python -m pip install "pydobotlab[gui]"
+python -m pip install pydobotlab
 ```
 
 To install from a source checkout, run `python -m pip install -e .` in the directory that contains `pyproject.toml`.
