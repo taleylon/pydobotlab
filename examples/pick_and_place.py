@@ -1,6 +1,7 @@
 """Pick-and-place: lift an object from A, drop it at B.
 
 Method names follow the DobotLab Coding Manual (3.6.x) verbatim.
+Start the control panel (pydobotlab-panel) first; the script connects through it.
 """
 
 from __future__ import annotations

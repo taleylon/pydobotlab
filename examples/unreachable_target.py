@@ -3,7 +3,7 @@
 Run with the simulator (no hardware needed):
     python examples/unreachable_target.py --simulator
 
-Or against a real arm:
+Or against a real arm, with pydobotlab-panel running:
     python examples/unreachable_target.py
 """
 
@@ -29,7 +29,9 @@ def main() -> int:
 
         install_simulator(arms=1)
 
-    with Dobot(via_broker=False) as bot:
+    # The in-process simulator is reached directly, a real arm through the panel.
+    bot = Dobot(via_broker=False) if args.simulator else Dobot()
+    with bot:
         bot.set_home()  # homes also from an alarm
 
         # 1. Reachable: this works.

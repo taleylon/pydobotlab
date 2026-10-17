@@ -36,6 +36,8 @@ occasionally silently drop CP segments it can't plan (without raising a
 hard error), so the post-check ensures the script fails loudly if the
 drawing didn't actually complete.
 
+Start the control panel (pydobotlab-panel) first; the script connects through it.
+
 Usage:
     python examples/draw_smiley.py
     python examples/draw_smiley.py --port /dev/ttyACM0

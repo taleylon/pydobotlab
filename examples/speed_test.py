@@ -9,7 +9,7 @@ plumbed through correctly. Use it with --simulator for offline debugging
 or in CI.
 
 Usage:
-    python examples/speed_test.py                    # real arm, auto-pick
+    python examples/speed_test.py                    # real arm through pydobotlab-panel
     python examples/speed_test.py --simulator        # no hardware needed
 """
 
@@ -38,7 +38,9 @@ def main() -> int:
 
         install_simulator(arms=1)
 
-    with Dobot(via_broker=False) as bot:
+    # The in-process simulator is reached directly, a real arm through the panel.
+    bot = Dobot(via_broker=False) if args.simulator else Dobot()
+    with bot:
         bot.set_home()  # homes also from an alarm
 
         # Park at a known starting point so the timings are comparable.

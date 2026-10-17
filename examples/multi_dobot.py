@@ -3,6 +3,8 @@
 There is no batch / group abstraction. Each ``Dobot`` instance owns one
 serial connection, one lock, one queue index, one set of background
 threads. Choreography between arms is the application's job.
+
+Start the control panel (pydobotlab-panel) first; the Dobot()s connect through it.
 """
 
 from __future__ import annotations

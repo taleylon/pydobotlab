@@ -1,5 +1,7 @@
 """End-to-end smoke test on real hardware.
 
+Start the control panel (pydobotlab-panel) first; the test connects through it.
+
 Usage (any of these work):
     python examples/smoke_test.py                       # auto-pick
     python examples/smoke_test.py /dev/ttyUSB0          # positional
