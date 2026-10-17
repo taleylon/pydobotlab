@@ -12,6 +12,7 @@ import time
 
 import pytest
 
+from pydobotlab.alarms import decode_alarms
 from pydobotlab.commands import CommandID
 from pydobotlab.protocol import pack, unpack, unpack_floats
 from pydobotlab.simulator import (
@@ -250,7 +251,7 @@ def test_unreachable_target_sets_the_workspace_alarm():
     arm = FakeDobot("/dev/sim-workspace")
     try:
         arm.set_motion_target(-200, 0, 50, 0)
-        assert arm._alarms[0x14 // 8] & (1 << (0x14 % 8))
+        assert decode_alarms(bytes(arm._alarms)).names() == ["PLAN_INVERSE_CALCULATION"]
     finally:
         arm.stop()
 
