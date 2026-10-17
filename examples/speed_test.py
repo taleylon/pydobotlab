@@ -39,8 +39,7 @@ def main() -> int:
         install_simulator(arms=1)
 
     with Dobot(via_broker=False) as bot:
-        bot.clear_alarm()
-        bot.set_home()
+        bot.set_home()  # homes also from an alarm
 
         # Park at a known starting point so the timings are comparable.
         bot.move_to(220, -60, 0, 0)

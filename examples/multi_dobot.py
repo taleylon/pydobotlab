@@ -52,8 +52,7 @@ right = Dobot()
 def per_arm(arm: Dobot, label: str) -> None:
     with arm:
         print(f"[{label}] connected on {arm.port}")
-        arm.clear_alarm()
-        arm.set_home()
+        arm.set_home()  # homes also from an alarm
         arm.motion_params = (50.0, 50.0)
         with arm.batch():  # runs and waits at the end of the block
             for x, y in [(200, -50), (200, 50), (250, 0)]:

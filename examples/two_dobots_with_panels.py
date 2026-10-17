@@ -50,8 +50,7 @@ def per_arm(
     """One arm's program: home, set speed, walk a square `laps` times."""
     with arm:
         print(f"[{label}] connected on {arm.port}")
-        arm.clear_alarm()
-        arm.set_home()
+        arm.set_home()  # homes also from an alarm
         arm.motion_params = (40.0, 40.0)  # vel, acc - both sides
 
         for lap in range(laps):

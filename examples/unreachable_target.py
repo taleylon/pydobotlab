@@ -30,8 +30,7 @@ def main() -> int:
         install_simulator(arms=1)
 
     with Dobot(via_broker=False) as bot:
-        bot.clear_alarm()
-        bot.set_home()
+        bot.set_home()  # homes also from an alarm
 
         # 1. Reachable: this works.
         print("Moving to (220, 0, 50)... ", end="", flush=True)
