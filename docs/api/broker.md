@@ -1,6 +1,6 @@
 # Broker
 
-Module `pydobotlab.broker`. A broker is a local TCP server that owns serial ports and relays commands from several `Magician` instances, including instances in other processes. With the default `via_broker="auto"`, [`Magician`](magician.md#magician) connects through a running broker. The control panel starts a broker automatically. The wire protocol is described in [The DobotBroker](../panel/broker.md).
+Module `pydobotlab.broker`. A broker is a local TCP server that owns serial ports and relays commands from several `Magician` instances, including instances in other processes. By default, [`Magician`](magician.md#magician) connects through a running broker and raises when none is running. The control panel starts a broker automatically. The wire protocol is described in [The DobotBroker](../panel/broker.md).
 
 | Member | Description |
 |---|---|
@@ -10,6 +10,7 @@ Module `pydobotlab.broker`. A broker is a local TCP server that owns serial port
 | [`DobotBroker.attach`](#dobotbroker-attach) | Open a port and manage it. |
 | [`DobotBroker.detach`](#dobotbroker-detach) | Close a managed port. |
 | [`DobotBroker.attached_ports`](#dobotbroker-attached_ports) | List the managed ports. |
+| [`DobotBroker.client_count`](#dobotbroker-client_count) | Number of connected clients. |
 | [`is_broker_reachable`](#is_broker_reachable) | Whether a broker accepts connections. |
 | [`list_broker_ports`](#list_broker_ports) | List the ports of a running broker. |
 
@@ -118,6 +119,16 @@ DobotBroker.attached_ports() -> list[str]
 ```
 
 Return the attached ports, sorted.
+
+---
+
+## `DobotBroker.client_count` {#dobotbroker-client_count}
+
+```python
+DobotBroker.client_count() -> int
+```
+
+Return the number of clients connected to an arm through the broker.
 
 ---
 

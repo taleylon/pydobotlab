@@ -38,7 +38,7 @@ Point-to-point targets outside the [workspace](../guide/workspace.md) of the rea
 from pydobotlab.simulator import install_simulator
 
 port = install_simulator(arms=1)[0]
-with Magician(port=port) as bot:
+with Magician(port=port, via_broker=False) as bot:
     bot.ptp(mode=1, x=200, y=0, z=50, r=0)  # MOVJ_XYZ
 ```
 
