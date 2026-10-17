@@ -1,6 +1,6 @@
 # Broker
 
-Module `pydobotlab.broker`. A broker is a local TCP server that owns serial ports and relays commands from several `Magician` instances, including instances in other processes. By default, [`Magician`](magician.md#magician) connects through a running broker and raises when none is running. The control panel starts a broker automatically. The wire protocol is described in [The DobotBroker](../panel/broker.md).
+Module `pydobotlab.broker`. A broker is a local TCP server that owns serial ports and relays commands from several `Magician` instances, including instances in other processes. [`Magician`](magician.md#magician) connects through a running broker. When the control panel is installed, it raises by default when none is running. The control panel starts a broker automatically. The wire protocol is described in [The DobotBroker](../panel/broker.md).
 
 | Member | Description |
 |---|---|

@@ -48,7 +48,7 @@ The [configuration file](config.md) is invalid. The message names the file and t
 
 ## `DobotConnectionError` {#dobotconnectionerror}
 
-The serial port or broker connection could not be opened, read, or written, a command was sent while not connected, or the control panel is not running (see `require_panel` in [`Magician`](magician.md#magician)).
+The serial port or broker connection could not be opened, read, or written, a command was sent while not connected, or the control panel is required and not running (see `require_panel` in [`Magician`](magician.md#magician)).
 
 ---
 
