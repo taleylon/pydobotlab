@@ -35,6 +35,6 @@ The `[workspace]` section of the [configuration file](../api/config.md) holds th
 
 ## Targets out of reach
 
-A target out of reach sets a planning alarm such as `PLAN_MOTION_TARGET_OUT_OF_WORKSPACE` or `PLAN_INVERSE_LIMIT`, and [`ptp`](../api/motion.md#ptp) raises [`DobotKinematicError`](../api/errors.md#dobotkinematicerror). A joint at its limit sets a `LIMIT_POS_J*` or `LIMIT_NEG_J*` alarm. See [Alarm bitmask](../protocol/alarms.md) and [Alarms and recovery](alarms.md).
+A target out of reach sets a planning alarm, `PLAN_INVERSE_CALCULATION` (out of the workspace) or `PLAN_INVERSE_LIMIT` (beyond a joint limit), and [`ptp`](../api/motion.md#ptp) raises [`DobotKinematicError`](../api/errors.md#dobotkinematicerror). A joint at its limit sets a `LIMIT_POS_J*` or `LIMIT_NEG_J*` alarm; the rear arm and forearm stretched or folded to their limit set `LIMIT_POS_PARALLELOGRAM` or `LIMIT_NEG_PARALLELOGRAM`. See [Alarm bitmask](../protocol/alarms.md) and [Alarms and recovery](alarms.md).
 
 The [simulator](../api/simulator.md) applies the joint ranges and arm lengths to point-to-point targets. It does not limit jogging.

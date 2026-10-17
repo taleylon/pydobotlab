@@ -15,9 +15,9 @@ if alarms:
 
 ## When an alarm occurs
 
-While an alarm is active, the status LED of the arm is red and the arm does not execute commands. The next command that waits for the arm, such as [`ptp`](../api/motion.md#ptp), raises a [`DobotAlarmError`](../api/errors.md#dobotalarmerror) subclass, which stops the program unless it is caught. Commands still queued are discarded, so clearing the alarm does not resume them. The control panel shows the active alarms in its banner.
+While an alarm is active, the status LED of the arm is red and the arm does not move: a move queued during an alarm is dropped. The next command that waits for the arm, such as [`ptp`](../api/motion.md#ptp), raises a [`DobotAlarmError`](../api/errors.md#dobotalarmerror) subclass, which stops the program unless it is caught. Commands still queued are discarded, so clearing the alarm does not resume them. The control panel shows the active alarms in its banner.
 
-Clear the alarm with [`clear_alarm`](../api/alarms.md#clear_alarm) or the Clear Alarm button of the panel. The LED turns green.
+Clear the alarm with [`clear_alarm`](../api/alarms.md#clear_alarm) or the Clear Alarm button of the panel. The LED turns green. A joint-limit alarm ends by itself when the joint is jogged back off the limit. [`set_home`](../api/motion.md#set_home) and the panel's Home button work also during an alarm: the arm homes, and the alarms are cleared when homing ends.
 
 ## Recovering from a failed move
 
@@ -34,17 +34,17 @@ except DobotAlarmError as error:
     bot.clear_alarm()
 ```
 
-The exception for each alarm category is listed under [`Alarm`](../api/alarms.md#alarm).
+How each alarm ends is listed under [`Alarm`](../api/alarms.md#alarm), and the exception for each code range under [Alarm groups](../api/alarms.md#alarm-groups).
 
 ## Recovery by alarm type
 
 | Alarm | Recovery |
 |---|---|
-| Planning or kinematics (`PLAN_*`, `KINEMATIC_*`) | Call `clear_alarm()`, then retry with a reachable target. |
-| Joint limit (`LIMIT_POS_J*`, `LIMIT_NEG_J*`) | Jog the joint away from the limit, then call `clear_alarm()`. |
+| Planning or motion (`PLAN_*`, `MOVE_*`) | Call `clear_alarm()`, then retry with a reachable target. |
+| Joint or parallelogram limit (`LIMIT_*`) | Jog the joint back off the limit; the alarm ends by itself. |
 | Overspeed (`OVERSPEED_J*`) | Lower `motion_params`, then call `clear_alarm()`. |
-| Lost step (`LOST_STEP_J*`) | Call `clear_alarm()`, then `set_home()`. |
-| System (`PUBLIC_*`) | Power-cycle the arm. |
+| Lost step (`LOST_STEP_J*`) | Call `set_home()`. |
+| System (`PUBLIC_*`) | `PUBLIC_RESET` and `PUBLIC_UNDEFINED_INSTRUCTION`: call `clear_alarm()`. Others: power-cycle the arm. |
 
 ## Clearing
 
