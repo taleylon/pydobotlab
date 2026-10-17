@@ -1,0 +1,33 @@
+# Constants of the pydobotlab control panel: the alarm text.
+# Read by panel_config.py. Per-user settings are in pydobotlab/config.toml.
+# Alarm codes and names: docs/Dobot-Magician-ALARM-Description.pdf.
+
+[alarm_text]
+# Joint names in alarm messages, for joints 1 to 4.
+joint_names = ["base (J1)", "rear arm (J2)", "forearm (J3)", "end-effector rotation (J4)"]
+unknown = "Unknown alarm. Press Clear Alarm; if it comes back, power-cycle the arm."
+
+# One line per alarm group. {joint} is the joint's name and {number} its number.
+# A joint-limit alarm ends by itself when the joint is jogged back off the limit.
+[alarm_text.groups]
+system = "System fault. Power-cycle the arm."
+out_of_reach = "The target is out of reach. Press Clear Alarm and choose a reachable target."
+overspeed = "The {joint} moved too fast. Lower the speed, then press Clear Alarm."
+positive_limit = "The {joint} reached its limit. Jog J{number}- to move it back."
+negative_limit = "The {joint} reached its limit. Jog J{number}+ to move it back."
+joint_limit = "A joint reached its limit. Jog it back the other way."
+lost_step = "The {joint} lost steps. Press Home."
+
+# Text for single alarms, by alarm name. It replaces the group's line.
+[alarm_text.alarms]
+PUBLIC_RESET = "The arm was reset. Press Clear Alarm."
+PUBLIC_UNDEFINED_INSTRUCTION = "The arm received an unknown command. Press Clear Alarm."
+PLAN_INVERSE_SINGULARITY = "The target is in a pose the arm cannot take. Press Clear Alarm and choose another target."
+PLAN_INVERSE_LIMIT = "The target needs a joint beyond its limit. Press Clear Alarm and choose another target."
+PLAN_DATA_REPEAT = "The move repeats a point. Press Clear Alarm and change the points."
+PLAN_ARC_INPUT_PARAMETER = "The arc points are invalid. Press Clear Alarm and change them."
+PLAN_JUMP_PARAMETER = "The JUMP parameters are invalid. Press Clear Alarm and change them."
+MOVE_INVERSE_SINGULARITY = "The path passes a pose the arm cannot follow. Press Clear Alarm and change the path."
+MOVE_INVERSE_LIMIT = "The path needs a joint beyond its limit. Press Clear Alarm and change the path."
+LIMIT_POS_PARALLELOGRAM = "The arm is stretched to its limit. Jog back the way it came."
+LIMIT_NEG_PARALLELOGRAM = "The arm is folded to its limit. Jog back the way it came."
