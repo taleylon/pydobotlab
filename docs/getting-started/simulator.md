@@ -24,7 +24,7 @@ with Magician(port="/dev/sim0") as bot:
 ## In the control panel
 
 ```bash
-pydobotlab-panel --simulator --arms 2
+pydobotlab-panel --simulator --simulator-arms 2
 ```
 
 ## Simulated behavior
