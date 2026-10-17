@@ -47,3 +47,10 @@ min_radius_mm = 85.0          # distance from the base axis
 max_radius_mm = 320.0         # maximum reach
 z_min_mm = -170.0
 z_max_mm = 175.0
+
+[messages]
+# A script connected while the control panel is not running.
+panel_not_running = "the panel is not running. Start it again, then re-run the script. To connect without the panel, use Magician(require_panel=False)."
+# A script lost its connection through the control panel. {port} is the arm's
+# port and {error} the cause.
+panel_connection_lost = "lost the connection to {port!r} through the control panel (was the panel closed? Keep it open while the script runs): {error}"

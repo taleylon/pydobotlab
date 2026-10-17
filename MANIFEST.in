@@ -13,4 +13,4 @@ include mkdocs.yml
 prune site
 global-exclude PyPI-Recovery-Codes-*.txt
 prune .local
-exclude to_check.md to_check.ipynb
+exclude to_check.md to_check*.ipynb

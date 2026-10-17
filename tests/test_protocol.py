@@ -161,12 +161,15 @@ class TestAlarms:
         }
 
     def test_unknown_alarm_kept_as_int(self):
-        # Bit 0x7F isn't a named catalogue entry, but it sits in the known
-        # 0x70 "OTHER" band, so it's labelled by band rather than as UNKNOWN.
-        mask = encode_alarms([0x7F])
-        s = decode_alarms(mask)
-        assert s.alarms == (0x7F,)
-        assert s.names() == ["OTHER_0x7F"]
+        # Codes the ALARM Description does not name keep their group and code.
+        s = decode_alarms(encode_alarms([0x4A, 0x7F]))
+        assert s.alarms == (0x4A, 0x7F)
+        assert s.names() == ["LIMIT_0x4A", "UNKNOWN_0x7F"]
+
+    def test_example_of_the_alarm_description(self):
+        # Dobot Magician ALARM Description V1.0.1, Table 1.3: bits 0 and 67.
+        raw = bytes.fromhex("01 00 00 00 00 00 00 00 08 00 00 00 00 00 00 00")
+        assert decode_alarms(raw).names() == ["PUBLIC_RESET", "LIMIT_NEG_J2"]
 
     def test_describe_returns_per_alarm_strings(self):
         s = decode_alarms(encode_alarms([Alarm.LOST_STEP_J4]))
@@ -181,7 +184,7 @@ class TestAlarms:
         assert Alarm.PUBLIC_RESET in s.alarms
 
     def test_round_trip_through_encode_decode(self):
-        alarms = [Alarm.PLAN_INVERSE_RESOLVE, Alarm.OVERSPEED_J4, Alarm.LOST_STEP_J2]
+        alarms = [Alarm.PLAN_INVERSE_SINGULARITY, Alarm.OVERSPEED_J4, Alarm.LOST_STEP_J2]
         mask = encode_alarms(alarms)
         decoded = decode_alarms(mask)
         for a in alarms:

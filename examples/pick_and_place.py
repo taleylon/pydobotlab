@@ -1,6 +1,7 @@
 """Pick-and-place: lift an object from A, drop it at B.
 
 Method names follow the DobotLab Coding Manual (3.6.x) verbatim.
+Start the control panel (pydobotlab-panel) first; the script connects through it.
 """
 
 from __future__ import annotations
@@ -32,8 +33,7 @@ def main() -> None:
     # Auto-pick the first free Dobot.
     with Dobot() as bot:
         print(f"connected on {bot.port}")
-        bot.clear_alarm()  # 3.6.23
-        bot.set_home()  # 3.6.20
+        bot.set_home()  # homes also from an alarm
         print("homed")
 
         bot.motion_params = (50.0, 50.0)  # 3.6.6 (vel, acc)

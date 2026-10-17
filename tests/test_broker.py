@@ -116,6 +116,29 @@ def test_broker_transport_round_trips_a_frame(broker):
         bt.close()
 
 
+def test_stopping_the_broker_hangs_up_on_clients_and_releases_the_port(patched_serial):
+    """Closing the panel while a script is connected through it must not wait
+    for the script: the panel's process ends and the port is free at once."""
+    import time
+
+    from pydobotlab import DobotConnectionError
+    from pydobotlab.transport import is_port_claimed
+
+    server = DobotBroker(port=0)
+    server.start()
+    client = BrokerTransport("/dev/fake-broker-B", broker_host="127.0.0.1", broker_port=server.port)
+    client.open()  # the broker opens the port for this client
+    client.send_frame(CommandID.GET_POSE, 0)
+
+    start = time.monotonic()
+    server.stop()
+    assert time.monotonic() - start < 1.5
+    assert not is_port_claimed("/dev/fake-broker-B")
+    with pytest.raises(DobotConnectionError, match="was the panel closed"):
+        client.send_frame(CommandID.GET_POSE, 0)
+    client.close()
+
+
 def test_two_concurrent_clients_dont_corrupt_each_other(broker):
     """Multi-client safety: two threads each fire many frames; all should
     return well-formed responses (no interleaving on the wire)."""

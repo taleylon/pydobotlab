@@ -140,9 +140,11 @@ Magician.set_home() -> bool
 
 Move the arm to its home position and wait until it arrives.
 
+Works also during an alarm, as in DobotLab: the arm homes, and the alarms are cleared when homing ends.
+
 **Returns** `bool`: `True`.
 
-**Raises** [`DobotAlarmError`](errors.md#dobotalarmerror) subclass: the arm reported an alarm.
+**Raises** [`DobotAlarmError`](errors.md#dobotalarmerror) subclass: an alarm comes back after clearing, as with [`clear_alarm`](alarms.md#clear_alarm).
 
 ---
 

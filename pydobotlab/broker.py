@@ -76,6 +76,9 @@ class DobotBroker:
         # GUI process). Only these are auto-detached when count hits 0.
         self._lazy_attached: set[str] = set()
         self._transports_lock = threading.Lock()
+        # Open client connections, so that stop() can hang up on them.
+        self._connections: set[socket.socket] = set()
+        self._connections_lock = threading.Lock()
         self._server: socketserver.TCPServer | None = None
         self._server_thread: threading.Thread | None = None
 
@@ -88,12 +91,20 @@ class DobotBroker:
 
         class ClientHandler(socketserver.BaseRequestHandler):
             def handle(handler) -> None:
-                broker._handle_client(handler.request)
+                with broker._connections_lock:
+                    broker._connections.add(handler.request)
+                try:
+                    broker._handle_client(handler.request)
+                finally:
+                    with broker._connections_lock:
+                        broker._connections.discard(handler.request)
 
         # ThreadingTCPServer so each client gets its own thread.
         class BrokerServer(socketserver.ThreadingTCPServer):
             daemon_threads = True
             allow_reuse_address = True
+            # Do not wait for client threads on close, stop() hangs up on clients instead.
+            block_on_close = False
 
         self._server = BrokerServer((self.host, self.port), ClientHandler)
         self.port = self._server.server_address[1]
@@ -112,6 +123,14 @@ class DobotBroker:
         if self._server_thread is not None:
             self._server_thread.join(timeout=2.0)
             self._server_thread = None
+        # Hang up on connected clients: their next request fails at once.
+        with self._connections_lock:
+            connections = list(self._connections)
+        for connection in connections:
+            try:
+                connection.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
         with self._transports_lock:
             for transport in self._transports.values():
                 try:
@@ -167,6 +186,11 @@ class DobotBroker:
     def attached_ports(self) -> list[str]:
         with self._transports_lock:
             return sorted(self._transports.keys())
+
+    def client_count(self) -> int:
+        """Number of clients connected to an arm through the broker."""
+        with self._transports_lock:
+            return sum(self._client_counts.values())
 
     # -- client handling -----------------------------------------------------
 

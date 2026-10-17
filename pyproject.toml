@@ -64,7 +64,7 @@ namespaces = false
 
 [tool.setuptools.package-data]
 "pydobotlab" = ["config.toml"]
-"pydobotlab.panel" = ["*.qss"]
+"pydobotlab.panel" = ["*.qss", "panel.toml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

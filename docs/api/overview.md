@@ -27,7 +27,7 @@ This reference describes every public object in pydobotlab. Objects are importab
 ## Conventions
 
 - Lengths are in millimetres, angles in degrees, durations in seconds, and ratios in percent (0 to 100).
-- The DobotLab functions that change the arm state wait until the arm has executed the command and return `True`. They raise a [`DobotAlarmError`](errors.md#dobotalarmerror) subclass when the arm reports an alarm.
+- The DobotLab functions that change the arm state wait until the arm has executed the command and return `True`. They raise a [`DobotAlarmError`](errors.md#dobotalarmerror) subclass when the arm reports an alarm, except [`set_home`](motion.md#set_home), which homes also during an alarm.
 - Other methods that queue a command, such as [`cp`](motion.md#cp), return its firmware queue index (`int`). Pass the index to [`wait_for`](queue.md#wait_for) to block until the command executes.
 - Read methods return the value read. Other immediate commands return `None` unless stated otherwise.
 - Examples assume that the names they use are imported from `pydobotlab` and that `bot` is a connected instance:

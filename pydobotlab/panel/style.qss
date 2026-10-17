@@ -198,6 +198,19 @@ QStatusBar {
     border-top: 1px solid #2e3340;
 }
 
+QLabel#notice {
+    background: #2b2620;
+    border: 1px solid #5a4a2a;
+    border-radius: 4px;
+    color: #f0d9a8;
+    padding: 8px 10px;
+}
+
+QFrame#separator {
+    background: #3a4050;
+    border: none;
+}
+
 QLabel#version {
     color: #7a8294;
     font-size: 9pt;

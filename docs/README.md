@@ -4,12 +4,13 @@ Python control for the Dobot Magician. pydobotlab implements the 28 Python funct
 
 It communicates over serial with `pyserial` using the [Dobot Communication Protocol V1.1.5](Dobot-Communication-Protocol-V1.1.5.pdf). No vendor library or DobotStudio installation is required.
 
-A script and the optional desktop control panel can control the same arm at the same time. A simulator allows use without hardware.
+Scripts connect through the desktop control panel, so a script and the panel control the same arm at the same time. A simulator allows use without hardware.
 
 ```bash
-python -m pip install pydobotlab
-# Optional desktop control panel:
+# Recommended, with the control panel:
 python -m pip install "pydobotlab[gui]"
+# Without the control panel; scripts then open the serial port directly:
+python -m pip install pydobotlab
 ```
 
 [Get started](getting-started/install.md){ .md-button .md-button--primary }
@@ -48,11 +49,12 @@ The [table of contents](SUMMARY.md) lists every page.
                        └─────────────────────┘
 ```
 
-Scripts and the panel both use the `Magician` class. While the panel is running, the broker relays their commands so that both can drive one arm. Otherwise `Magician` opens the serial port directly.
+Scripts and the panel both use the `Magician` class. The broker relays their commands so that both can drive one arm. When the panel is installed, a script requires it to be running. Without the panel installed, a script opens the serial port directly when no panel is running.
 
 ## References
 
 - [Dobot Communication Protocol V1.1.5](Dobot-Communication-Protocol-V1.1.5.pdf)
 - [Dobot Magician V2 User Guide (DobotLab-based) V2.3.1](Dobot-Magician-V2-User-Guide-V2.3.1.pdf)
+- [Dobot Magician ALARM Description V1.0.1](Dobot-Magician-ALARM-Description.pdf)
 - [Dobot Magician product page](https://www.dobot-robots.com/products/education/magician.html)
 - [Source repository](https://github.com/taleylon/pydobotlab)

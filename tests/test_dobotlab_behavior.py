@@ -90,7 +90,7 @@ def test_set_home_and_settings_return_true(robot):
 def test_unreachable_target_raises_at_the_ptp_call(robot):
     with pytest.raises(DobotKinematicError) as raised:
         robot.ptp(mode=1, **UNREACHABLE)
-    assert raised.value.alarms == ["PLAN_MOTION_TARGET_OUT_OF_WORKSPACE"]
+    assert raised.value.alarms == ["PLAN_INVERSE_CALCULATION"]  # target out of the workspace
     assert "clear_alarm()" in str(raised.value)
 
 
@@ -102,6 +102,23 @@ def test_arm_refuses_every_command_until_the_alarm_is_cleared(robot):
 
     assert robot.clear_alarm() is True
     assert robot.ptp(mode=1, x=230, y=0, z=30, r=0) is True
+
+
+def test_set_home_homes_during_an_alarm_and_clears_it(robot):
+    robot.ptp(mode=1, x=250, y=40, z=0, r=0)
+    with pytest.raises(DobotKinematicError):
+        robot.ptp(mode=1, **UNREACHABLE)
+    assert robot.set_home() is True  # as in DobotLab: no alarm error, the arm homes
+    assert position(robot) == (200, 0, 50)
+    assert not robot.get_alarms()
+
+
+def test_set_home_raises_for_an_alarm_that_comes_back_after_homing(robot, monkeypatch):
+    lasting = decode_alarms(encode_alarms([Alarm.PUBLIC_ANGLE_SENSOR_READ]))
+    monkeypatch.setattr(robot, "get_alarms", lambda: lasting)
+    with pytest.raises(DobotSystemAlarmError):
+        robot.set_home()
+    assert position(robot) == (200, 0, 50)  # homing itself ran
 
 
 def test_commands_queued_before_an_alarm_do_not_resume_after_clearing(robot):
@@ -132,20 +149,22 @@ def test_clear_alarm_raises_and_keeps_an_alarm_whose_cause_remains():
 @pytest.mark.parametrize(
     ("alarm", "error_class"),
     [
-        (Alarm.PLAN_INVERSE_RESOLVE, DobotKinematicError),
-        (Alarm.KINEMATIC_SINGULARITY, DobotKinematicError),
+        (Alarm.PLAN_INVERSE_SINGULARITY, DobotKinematicError),
+        (Alarm.MOVE_INVERSE_LIMIT, DobotKinematicError),
         (Alarm.LIMIT_NEG_J4, DobotKinematicError),
+        (Alarm.LIMIT_POS_PARALLELOGRAM, DobotKinematicError),
         (Alarm.OVERSPEED_J3, DobotOverspeedError),
         (Alarm.LOST_STEP_J1, DobotLostStepError),
         (Alarm.PUBLIC_ANGLE_SENSOR_READ, DobotSystemAlarmError),
-        (Alarm.OTHER_LIMIT_TRIGGERED_J1_J2, DobotAlarmError),
+        (0x70, DobotAlarmError),  # not in the ALARM Description
     ],
 )
 def test_each_alarm_group_has_its_exception(alarm, error_class):
-    error = alarm_error(decode_alarms(encode_alarms([alarm])), "heading", "remedy")
+    active = decode_alarms(encode_alarms([alarm]))
+    error = alarm_error(active, "heading", "remedy")
     assert type(error) is error_class
     assert isinstance(error, DobotAlarmError)
-    assert error.alarms == [alarm.name]
+    assert error.alarms == active.names()
 
 
 # -- batch ----------------------------------------------------------------------------

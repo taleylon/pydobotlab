@@ -31,6 +31,7 @@ from pydobotlab import CommandID, Dobot, DobotAlarmError, DobotConnectionError, 
 from pydobotlab.config import get_config
 from pydobotlab.protocol import JOGCmd, JogMode, pack_floats, pack_u8
 
+from .alarm_text import alarm_lines
 from .widgets import CoordReadout, JogPad, JumpParamsCard, version_label
 
 
@@ -49,7 +50,7 @@ class PoseStreamer(QObject):
     the Qt main thread via a signal."""
 
     poseReady = Signal(float, float, float, float, float, float, float, float)
-    alarmsChanged = Signal(list)  # list[str] of alarm names
+    alarmsChanged = Signal(list)  # list[int] of active alarm codes
     speedChanged = Signal(float)  # PTP velocity ratio in percent
     error = Signal(str)
 
@@ -68,7 +69,7 @@ class PoseStreamer(QObject):
         self._alarm_period_ticks = max(1, int(round(hz / alarm_hz)))
         self._speed_period_ticks = max(1, int(round(hz / speed_hz)))
         self._tick = 0
-        self._last_alarms: list[str] = []
+        self._last_alarms: list[int] = []
         self._last_speed: float = -1.0
 
     def push(self, pose) -> None:
@@ -85,14 +86,12 @@ class PoseStreamer(QObject):
                 pose.j4,
             )
             self._tick += 1
-            # 2 Hz: alarm refresh.
-            # We emit one "{TAG}: {explanation + fix}" line per active alarm
-            # so the banner shows both what's wrong and how to recover.
+            # 2 Hz: alarm refresh; the panel turns the codes into text.
             if self._tick % self._alarm_period_ticks == 0:
-                lines = self._bot.get_alarms().format()
-                if lines != self._last_alarms:
-                    self._last_alarms = lines
-                    self.alarmsChanged.emit(lines)
+                codes = [int(alarm) for alarm in self._bot.get_alarms()]
+                if codes != self._last_alarms:
+                    self._last_alarms = codes
+                    self.alarmsChanged.emit(codes)
             # 1 Hz: speed refresh - picks up changes a student script
             # makes via motion_params or set_jog_common_params, so the
             # slider stays in sync with what the arm is actually using.
@@ -109,9 +108,11 @@ class PoseStreamer(QObject):
 
 
 class HomeWorker(QThread):
-    """Runs ``set_home()`` off the GUI thread so the UI doesn't freeze."""
+    """Runs ``set_home()`` off the GUI thread. As in DobotLab, it homes also
+    during an alarm. An alarm that comes back after homing is not an error
+    here: the banner shows it."""
 
-    done = Signal(bool, str)  # (ok, error_message)
+    done = Signal(bool, str)  # (ok, error message)
 
     def __init__(self, bot: Dobot, parent=None) -> None:
         super().__init__(parent)
@@ -120,11 +121,12 @@ class HomeWorker(QThread):
     def run(self) -> None:
         try:
             self._bot.set_home()
-            self.done.emit(True, "")
-        except DobotAlarmError as error:
-            self.done.emit(False, str(error))  # the message lists each alarm and its fix
+        except DobotAlarmError:
+            pass
         except Exception as error:
             self.done.emit(False, f"{error}\n{traceback.format_exc()}")
+            return
+        self.done.emit(True, "")
 
 
 # ---------------------------------------------------------------------------
@@ -137,17 +139,24 @@ class ControlPanel(QMainWindow):
 
     closed = Signal(str)  # emits port name when window closes
 
-    def __init__(self, port: str, parent=None) -> None:
+    def __init__(
+        self, port: str, parent=None, *, developer: bool = False, name: str = "Dobot Magician"
+    ) -> None:
         super().__init__(parent)
-        self.setWindowTitle(f"Dobot Magician @ {port}")
-        self.resize(880, 760)
-
         self._port = port
-        self._bot = Dobot(port)
+        self._developer = developer  # show ports, alarm codes, and full error details
+        # The arm's name in the window; the port only in developer mode.
+        self._label = f"{name}  -  {port}" if developer else name
+        self.setWindowTitle(self._label)
+        self.resize(880, 760)
+        # require_panel=False: this window is part of the panel. Without
+        # auto_start_queue, opening or closing the window does not clear the
+        # arm's queue, so a script's queued moves are not cleared out.
+        self._bot = Dobot(port, require_panel=False, auto_start_queue=False)
         self._streamer: PoseStreamer | None = None
         self._home_worker: HomeWorker | None = None
         self._connected: bool = False
-        self._jog_locked: bool = False  # True while alarms are active
+        self._alarm_active: bool = False
         self._watchdog: QTimer | None = None
         self._failed_checks: int = 0  # consecutive failed watchdog checks
 
@@ -155,7 +164,7 @@ class ControlPanel(QMainWindow):
         self.connect_signals()
 
         # Defer connection so the window can show "connecting..." first.
-        self.statusBar().showMessage(f"Connecting to {port}...")
+        self.statusBar().showMessage(f"Connecting to {self._label}...")
         # Single-shot via a 0-ms QThread-style; here just call directly since
         # connect() is fast for the happy path.
         self.connect_to_arm()
@@ -169,9 +178,9 @@ class ControlPanel(QMainWindow):
         root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(10)
 
-        # Header: port + serial + status + Reconnect + Home + Clear Alarm
+        # Header: name + status + Reconnect + Home + Clear Alarm
         header = QHBoxLayout()
-        self._title = QLabel(f"Dobot Magician  -  {self._port}")
+        self._title = QLabel(self._label)
         self._title.setObjectName("header")
         header.addWidget(self._title)
         header.addStretch(1)
@@ -338,18 +347,23 @@ class ControlPanel(QMainWindow):
 
     # ---- Connection lifecycle ----------------------------------------------
 
+    @property
+    def has_open_connection(self) -> bool:
+        """The window's connection to its arm is open."""
+        return self._bot.is_open
+
     def connect_to_arm(self) -> None:
         try:
             self._bot.connect()
+            self._bot.start_queue()
         except DobotConnectionError as error:
             QMessageBox.critical(
-                self, "Connection failed", f"Could not open {self._port}:\n{error}"
+                self, "Connection failed", f"Could not open {self._label}:\n{error}"
             )
             self.close()
             return
 
-        self._title.setText(f"Dobot Magician  -  {self._bot.port}")
-        self.statusBar().showMessage(f"Connected to {self._bot.port}")
+        self.statusBar().showMessage(f"Connected to {self._label}")
 
         self.adopt_arm_speed()
 
@@ -435,9 +449,10 @@ class ControlPanel(QMainWindow):
 
     @Slot()
     def start_homing(self) -> None:
+        """Home the arm, also from an alarm. The controls stay disabled until homing ends."""
         if self._home_worker is not None and self._home_worker.isRunning():
             return
-        self._home_button.setEnabled(False)
+        self.set_controls_enabled(False)
         self.statusBar().showMessage("homing...")
         self._home_worker = HomeWorker(self._bot, self)
         self._home_worker.done.connect(self.finish_homing)
@@ -445,13 +460,24 @@ class ControlPanel(QMainWindow):
 
     @Slot(bool, str)
     def finish_homing(self, ok: bool, error: str) -> None:
-        self._home_button.setEnabled(True)
+        """Report the end of homing. An alarm is never a pop-up here: one still
+        active after homing is in the banner and the status bar."""
         self._home_worker = None
-        if ok:
-            self.statusBar().showMessage("home complete", 3000)
-        else:
+        self.set_controls_enabled(self._connected)
+        if not ok:
             self.statusBar().showMessage("home failed", 3000)
-            QMessageBox.warning(self, "Home failed", error)
+            QMessageBox.warning(
+                self, "Home failed", error if self._developer else error.splitlines()[0]
+            )
+            return
+        try:
+            alarm_active = bool(self._bot.get_alarms())
+        except Exception:
+            alarm_active = False
+        if alarm_active:
+            self.statusBar().showMessage("home complete - an alarm is still active", 5000)
+        else:
+            self.statusBar().showMessage("home complete", 3000)
 
     @Slot()
     def clear_alarms(self) -> None:
@@ -465,7 +491,9 @@ class ControlPanel(QMainWindow):
         try:
             self._bot.clear_alarm()
         except DobotAlarmError as error:
-            QMessageBox.warning(self, "Alarm persists", str(error))
+            codes = [int(alarm) for alarm in self._bot.get_alarms()]
+            message = str(error) if self._developer else "\n".join(alarm_lines(codes))
+            QMessageBox.warning(self, "Alarm persists", message)
             self.statusBar().showMessage("alarm persists - see warning", 4000)
             return
         except Exception as error:
@@ -475,48 +503,32 @@ class ControlPanel(QMainWindow):
         self._alarm_banner.setVisible(False)
 
     @Slot(list)
-    def update_alarms(self, lines: list) -> None:
-        """Display each active alarm; lock out JOG while alarms are active.
+    def update_alarms(self, codes: list) -> None:
+        """Show the active alarms in the banner.
 
-        Why lock JOG out: in alarm state the firmware queue is paused, and
-        some firmware revisions ignore the JOG-IDLE on button release even
-        though we send it as an IMMEDIATE frame. The visible symptom is
-        "click a button, the arm keeps moving forever". The safe behaviour
-        is to refuse to start a new jog at all until the student clears the
-        alarm (which the panel surfaces with the troubleshoot text right
-        above the buttons). Clear Alarm stays enabled - it is the recovery
-        path. Home stays enabled and reports the active alarm.
-
-        We also fire one extra ``jog_stop()`` on every transition, so if a
-        jog was already in flight at the moment the alarm fired, the arm
-        stops the moment we see the alarm.
+        The jog pads stay enabled during an alarm, as in DobotLab: the arm
+        refuses a jog it cannot make, and a joint-limit alarm ends by itself
+        when the joint is jogged back off the limit. When an alarm appears, one
+        extra ``jog_stop()`` stops a jog that was running at that moment.
         """
-        active = bool(lines)
+        active = bool(codes)
         if active:
-            text = "\n".join(f"  • {line}" for line in lines)
-            self._alarm_banner.setText("ALARMS:\n" + text)
+            lines = alarm_lines(codes, self._developer)
+            if len(lines) == 1:
+                self._alarm_banner.setText(f"Alarm: {lines[0]}")
+            else:
+                self._alarm_banner.setText("Alarms:\n" + "\n".join(f"  • {line}" for line in lines))
             self._alarm_banner.setVisible(True)
         else:
             self._alarm_banner.setVisible(False)
-        # Toggle JOG availability (Clear Alarm stays on - it recovers).
-        if active != self._jog_locked:
-            self._jog_locked = active
-            for pad in (self._xy_pad, self._zr_pad, self._j12_pad, self._j34_pad):
-                pad.setEnabled(not active)
-            if active:
-                # Belt-and-braces: any jog that was in flight when the alarm
-                # fired is forcibly idled now, so the arm stops with the alarm.
-                try:
-                    self._bot.jog_stop()
-                except Exception as error:
-                    self.statusBar().showMessage(
-                        f"Attention! stop has failed - the arm may still be moving: {error}", 10000
-                    )
-                else:
-                    self.statusBar().showMessage(
-                        "Attention! Jog is disabled - you must clear the alarm first",
-                        4000,
-                    )
+        if active and not self._alarm_active:
+            try:
+                self._bot.jog_stop()
+            except Exception as error:
+                self.statusBar().showMessage(
+                    f"Attention! stop has failed - the arm may still be moving: {error}", 10000
+                )
+        self._alarm_active = active
 
     @Slot(float, float, float, float, float, float, float, float)
     def update_pose(
@@ -575,7 +587,11 @@ class ControlPanel(QMainWindow):
                 self._bot.stop_pose_stream()
             except Exception:
                 pass
-        # Disable interactive controls while offline.
+        homing = self._home_worker is not None
+        self.set_controls_enabled(connected and not homing)
+
+    def set_controls_enabled(self, enabled: bool) -> None:
+        """Enable or disable every control that sends a command to the arm."""
         for widget in (
             self._home_button,
             self._clear_alarm_button,
@@ -587,19 +603,20 @@ class ControlPanel(QMainWindow):
             self._jump_card,
             self._effector,
         ):
-            widget.setEnabled(connected)
+            widget.setEnabled(enabled)
 
     @Slot()
     def reconnect(self) -> None:
         """Try to re-open the serial connection to the same port."""
         self._reconnect_button.setEnabled(False)
-        self.statusBar().showMessage(f"Reconnecting to {self._port}...")
+        self.statusBar().showMessage(f"Reconnecting to {self._label}...")
         try:
             try:
                 self._bot.disconnect()
             except Exception:
                 pass
             self._bot.connect()
+            self._bot.start_queue()
         except Exception as error:
             self.statusBar().showMessage(f"Reconnect failed: {error}", 5000)
             self._reconnect_button.setEnabled(True)
@@ -609,7 +626,7 @@ class ControlPanel(QMainWindow):
         self.adopt_arm_speed()
         self.set_connection_state(True)
         self._reconnect_button.setEnabled(True)
-        self.statusBar().showMessage(f"Reconnected to {self._port}", 3000)
+        self.statusBar().showMessage(f"Reconnected to {self._label}", 3000)
 
     # ---- Jump-params card --------------------------------------------------
 

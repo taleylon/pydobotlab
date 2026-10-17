@@ -1,5 +1,13 @@
 # Connecting to an arm
 
+Start the [control panel](../panel/running.md) before the script, and keep it running until the script ends:
+
+```bash
+pydobotlab-panel
+```
+
+`Magician` connects through the panel, so the panel and the script control the same arm. When the control panel is installed and not running, `connect` raises [`DobotConnectionError`](../api/errors.md#dobotconnectionerror). See [Running scripts](../panel/running.md#scripts).
+
 ## Automatic port selection
 
 Without a `port` argument, `Magician` probes the serial ports and uses the first one that answers as a Dobot. See [Discovery](../api/discovery.md).
@@ -59,9 +67,16 @@ right.join()
 
 `mode=1` selects a joint-interpolated move to a Cartesian target. See [`PTPMode`](../api/motion.md#ptpmode). Complete examples are in `examples/multi_dobot.py` and `examples/two_dobots_with_panels.py`.
 
-## Sharing an arm with the control panel
+## Without the control panel
 
-While `pydobotlab-panel` is running, `Magician` connects through the panel's broker on `127.0.0.1:8765` and no code change is needed. The panel and the script then control the same arm. See [The DobotBroker](../panel/broker.md).
+When the control panel is not installed, `Magician` connects through the panel when it is running and opens the serial port directly otherwise. With the panel installed, `require_panel=False` does the same:
+
+```python
+with Magician(require_panel=False) as bot:
+    print(bot.get_pose())
+```
+
+While such a script holds the port, the panel cannot open the arm.
 
 ## Next
 

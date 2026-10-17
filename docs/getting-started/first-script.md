@@ -1,6 +1,6 @@
 # Hello, Magician
 
-A first program that homes the arm, moves it, and reads its pose.
+A first program that homes the arm, moves it, and reads its pose. Start the control panel with `pydobotlab-panel` first; the program connects through it.
 
 ```python
 from pydobotlab import Magician

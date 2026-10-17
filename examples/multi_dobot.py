@@ -3,6 +3,8 @@
 There is no batch / group abstraction. Each ``Dobot`` instance owns one
 serial connection, one lock, one queue index, one set of background
 threads. Choreography between arms is the application's job.
+
+Start the control panel (pydobotlab-panel) first; the Dobot()s connect through it.
 """
 
 from __future__ import annotations
@@ -52,8 +54,7 @@ right = Dobot()
 def per_arm(arm: Dobot, label: str) -> None:
     with arm:
         print(f"[{label}] connected on {arm.port}")
-        arm.clear_alarm()
-        arm.set_home()
+        arm.set_home()  # homes also from an alarm
         arm.motion_params = (50.0, 50.0)
         with arm.batch():  # runs and waits at the end of the block
             for x, y in [(200, -50), (200, 50), (250, 0)]:

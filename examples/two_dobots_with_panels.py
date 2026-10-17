@@ -11,9 +11,9 @@ Workflow:
           Set Home / Clear Alarm buttons all work.
     3.  In another terminal (or PyCharm):
             python examples/two_dobots_with_panels.py
-        - The script's `Dobot()` calls AUTO-DETECT the running panel's
-          broker on 127.0.0.1:8765 and route through it. No port arg, no
-          fuss - it just works because the broker arbitrates traffic.
+        - The script's `Dobot()` calls connect through the running panel's
+          broker on 127.0.0.1:8765. No port argument is needed: the broker
+          arbitrates the traffic.
 
 What you should see while the script runs:
 
@@ -25,9 +25,9 @@ What you should see while the script runs:
     * If you push an unlocked arm by hand, the panel reflects the new
       pose even though the script issued no command.
 
-If the panel isn't running, this script still works - `Dobot()` falls
-back to opening the serial port directly. You just won't get the live
-visualisation.
+The panel must keep running until the script ends. Without it, `Dobot()`
+raises DobotConnectionError; `Dobot(require_panel=False)` opens the serial
+port directly instead, without the live visualisation.
 """
 
 from __future__ import annotations
@@ -50,8 +50,7 @@ def per_arm(
     """One arm's program: home, set speed, walk a square `laps` times."""
     with arm:
         print(f"[{label}] connected on {arm.port}")
-        arm.clear_alarm()
-        arm.set_home()
+        arm.set_home()  # homes also from an alarm
         arm.motion_params = (40.0, 40.0)  # vel, acc - both sides
 
         for lap in range(laps):
@@ -72,8 +71,7 @@ def per_arm(
 
 def main() -> None:
     # Two independent Dobot objects. Each one auto-picks a free arm when
-    # connect() runs (auto-pick respects the broker's port list when the
-    # panel is up; falls back to direct serial scan otherwise).
+    # connect() runs, starting with the ports the panel's broker has open.
     bots = [Dobot() for _ in range(2)]
 
     threads = [

@@ -2,7 +2,55 @@
 
 All notable changes to pydobotlab. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.2] - Unreleased
+## [0.2.1] - 2026-10-17
+
+### Changed (breaking)
+
+- Alarm codes and names follow the Dobot Magician ALARM Description V1.0.1, now hosted with the documentation. Several codes had the wrong name: for example `0x43`, reported when J2 is below its range, is `LIMIT_NEG_J2` (was `LIMIT_POS_J4`), and `0x50` to `0x53` are lost-step alarms (were negative joint limits).
+  - Planning and motion alarms: `PLAN_INVERSE_SINGULARITY`, `PLAN_INVERSE_CALCULATION` (target out of the workspace), `PLAN_INVERSE_LIMIT`, `PLAN_DATA_REPEAT`, `PLAN_ARC_INPUT_PARAMETER`, `PLAN_JUMP_PARAMETER`, `MOVE_INVERSE_SINGULARITY`, `MOVE_INVERSE_CALCULATION`, and `MOVE_INVERSE_LIMIT` replace the previous `PLAN_*` and `KINEMATIC_*` names.
+  - New: `LIMIT_POS_PARALLELOGRAM` and `LIMIT_NEG_PARALLELOGRAM` (`0x48`, `0x49`): the rear arm and forearm stretched or folded to their limit.
+  - Removed: `OTHER_LIMIT_TRIGGERED_J1_J2` and the codes `0x60` to `0x63`, which are not in the document.
+  - Codes without a name are labelled by group and code, for example `LIMIT_0x4A`.
+  - The remedy in each alarm message follows the document; for example, a joint-limit alarm says which way to jog the joint.
+- A lost-step alarm raises `DobotLostStepError` (previously `DobotKinematicError`).
+- `set_home()` works also during an alarm, as in DobotLab: the arm homes, and the alarms are cleared when homing ends. It raises only if an alarm comes back after clearing.
+- With the control panel installed (`pydobotlab[gui]`, now the recommended installation), scripts run with the panel: start `pydobotlab-panel` first and quit it after the script ends. `Magician` connects through the panel and raises `DobotConnectionError` when it is not running. Without the panel installed, `Magician` connects as before: through the panel when it is running, otherwise directly. The new `require_panel` argument overrides this: `True` requires the running panel, `False` connects as before. `via_broker=False` still always opens the port directly.
+
+### Added
+
+- Control panel:
+  - Arms are named *Dobot Magician 1*, *Dobot Magician 2*, and so on, in the hub and in their control panel windows, numbered in the order they are found.
+  - `pydobotlab-panel --dev` shows each arm's port, the alarm names, codes, remedies, and raw alarm bytes, and full error details.
+  - Alarms are shown as one short line each: what happened and what to do. The text is in `pydobotlab/panel/panel.toml`.
+  - In the hub, a line separates the Dobot Magicians from *Other devices (n)*.
+  - The hub asks for confirmation before quitting while scripts are connected through the panel.
+- `DobotBroker.client_count()`: the number of clients connected to an arm through the broker.
+
+### Changed
+
+- Control panel:
+  - Home works during an alarm, as in DobotLab, and shows no alarm message. The controls are disabled until homing ends.
+  - The jog pads work during an alarm, as in DobotLab: the arm refuses a jog it cannot make, and a joint-limit alarm ends by itself when the joint is jogged back off the limit.
+  - A busy port in the hub says to close the script or program using it, then click Refresh.
+- A script that loses its connection through the panel says to keep the panel open while the script runs.
+- The simulator reports `PLAN_INVERSE_CALCULATION` for an unreachable target, as the arm does, and homes also during an alarm.
+
+### Fixed
+
+- Closing the control panel while a script was connected through it left the panel's process running and the arm's port busy until the script disconnected. The panel now closes at once, and the script's next command raises `DobotConnectionError`.
+- Opening or closing an arm's control panel window cleared the arm's command queue, so a running script lost its queued moves and waited for them forever. The window now starts the queue without clearing it and leaves it unchanged when it closes.
+- The hub cut a long permission message short. It is now explained in a box above the list, wrapped to the window width.
+- Alarm codes without a name, such as the parallelogram limit, were shown as raw codes in the panel.
+
+### Documentation
+
+- Alarm reference: the meaning of each code and how each alarm ends, from the ALARM Description, and a table of code ranges with their exception classes.
+- The README and the examples call `set_home()` without `clear_alarm()` first, so they also start from an arm switched on in an alarm.
+- `DobotBroker.stop` and the DobotLab differences describe the new behavior.
+- Running scripts with the control panel: the order to start and quit them, and `require_panel=False` for use without the panel. The examples for a real arm say to start the panel first.
+- Corrected: the simulator page gave `--arms` instead of `--simulator-arms`.
+
+## [0.2] - 2026-10-12
 
 ### Changed (breaking)
 
@@ -102,6 +150,7 @@ All notable changes to pydobotlab. The format follows [Keep a Changelog](https:/
 
 First release: the Python functions of the DobotLab Magician manual over serial, the firmware command queue, alarms, pose streaming, port discovery, the broker, the PySide6 control panel, and the simulator.
 
+[0.2.1]: https://github.com/taleylon/pydobotlab/compare/v0.2...v0.2.1
 [0.2]: https://github.com/taleylon/pydobotlab/compare/v0.1.0.1...v0.2
 [0.1.0.1]: https://github.com/taleylon/pydobotlab/compare/v0.1.0...v0.1.0.1
 [0.1.0]: https://github.com/taleylon/pydobotlab/releases/tag/v0.1.0

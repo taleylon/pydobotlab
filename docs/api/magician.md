@@ -1,6 +1,6 @@
 # Magician
 
-`Magician` controls one Dobot Magician arm. Create an instance, then open the connection with `connect()` or a `with` block.
+`Magician` controls one Dobot Magician arm. Create an instance, then open the connection with `connect()` or a `with` block. When the control panel is installed, the connection goes through the [control panel](../panel/running.md#scripts) by default, which must be running.
 
 | Member | Description |
 |---|---|
@@ -21,7 +21,7 @@
 ## `Magician` {#magician}
 
 ```python
-Magician(port=None, baudrate=None, timeout=None, *, auto_start_queue=True, only_known_adapters=False, via_broker="auto", broker_host=None, broker_port=None, verbose=True)
+Magician(port=None, baudrate=None, timeout=None, *, auto_start_queue=True, only_known_adapters=False, require_panel=None, via_broker="auto", broker_host=None, broker_port=None, verbose=True)
 ```
 
 Create a driver for one arm. The connection opens on [`connect`](#connect).
@@ -35,7 +35,8 @@ Create a driver for one arm. The connection opens on [`connect`](#connect).
 | `timeout` | `float` or `None`, default `None` | Read timeout per byte, in seconds. `None` uses the configured default, `1.0` unless changed. |
 | `auto_start_queue` | `bool`, default `True` | Clear and start the firmware command queue on connect and on disconnect. |
 | `only_known_adapters` | `bool`, default `False` | When selecting a port automatically, consider only known Dobot adapters ([`KNOWN_DOBOT_USB_IDS`](discovery.md#known_dobot_usb_ids)). |
-| `via_broker` | `bool` or `"auto"`, default `"auto"` | `"auto"` connects through a running [broker](broker.md) when one is reachable and opens the port directly otherwise. `True` requires a broker. `False` always opens the port directly. |
+| `require_panel` | `bool` or `None`, default `None` | `True` connects through the running control panel, that is through its [broker](broker.md), and raises if it is not running. `False` connects through the panel when it is running and opens the port directly otherwise. `None` is `True` when the control panel is installed (`pydobotlab[gui]`) and `False` otherwise. |
+| `via_broker` | `bool` or `"auto"`, default `"auto"` | `"auto"` follows `require_panel`. `True` requires a broker. `False` always opens the port directly; `require_panel` does not apply. |
 | `broker_host` | `str` or `None`, default `None` | Broker host. `None` uses the configured default, `"127.0.0.1"` unless changed. |
 | `broker_port` | `int` or `None`, default `None` | Broker TCP port. `None` uses the configured default, `8765` unless changed. |
 | `verbose` | `bool`, default `True` | Print a line when `connect` succeeds or fails, and when the pose stream fails or recovers. |
@@ -65,11 +66,11 @@ Magician.connect() -> None
 
 Open the connection and prepare the command queue.
 
-Selects a port if none was given, connects directly or through a broker according to `via_broker`, then clears and starts the firmware queue when `auto_start_queue=True`. With `verbose=True`, prints `[pydobotlab] Connected to <port>.` on success, or `[pydobotlab] Failed to connect: <reason>` to standard error before raising.
+Selects a port if none was given, connects through the control panel or directly according to `require_panel` and `via_broker`, then clears and starts the firmware queue when `auto_start_queue=True`. With `verbose=True`, prints `[pydobotlab] Connected to <port>.` on success, or `[pydobotlab] Failed to connect: <reason>` to standard error before raising.
 
 **Raises**
 
-- [`DobotConnectionError`](errors.md#dobotconnectionerror): no arm was found, the port could not be opened, or `via_broker=True` and no broker is reachable.
+- [`DobotConnectionError`](errors.md#dobotconnectionerror): the control panel is required and not running (`require_panel`), no arm was found, the port could not be opened, or `via_broker=True` and no broker is reachable.
 - [`DobotPortInUseError`](errors.md#dobotportinuseerror): the port is open in this process or in another program.
 - [`DobotPermissionError`](errors.md#dobotpermissionerror): the operating system denied access to the port.
 

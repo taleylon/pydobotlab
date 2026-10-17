@@ -57,10 +57,10 @@ class DobotAlarmError(DobotError):
 class DobotKinematicError(DobotAlarmError):
     """The arm could not plan or execute a move.
 
-    Raised for planning and kinematic alarms (unreachable target, inverse
-    kinematics, singularity) and for joint-limit alarms (``LIMIT_POS_J*``,
-    ``LIMIT_NEG_J*``). Recover with :meth:`Dobot.clear_alarm` or the panel's
-    Clear Alarm button.
+    Raised for planning and motion alarms (``PLAN_*``, ``MOVE_*``: unreachable
+    target, joint limit, singularity) and for limit alarms (``LIMIT_*``). Clear
+    planning and motion alarms with :meth:`Dobot.clear_alarm` or the panel's
+    Clear Alarm button; a limit alarm ends when the joint is jogged back.
     """
 
 

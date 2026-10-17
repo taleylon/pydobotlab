@@ -12,6 +12,7 @@ the application's job, not the library's.
 
 from __future__ import annotations
 
+import importlib.util
 import re
 import struct
 import sys
@@ -45,6 +46,12 @@ from .protocol import (
 )
 from .queue import BatchState, batch_context
 from .transport import BrokerTransport, SerialTransport
+
+
+def is_panel_installed() -> bool:
+    """Whether the control panel can run here: PySide6, from the ``gui`` extra, is installed."""
+    return importlib.util.find_spec("PySide6") is not None
+
 
 # ---------------------------------------------------------------------------
 # Public data types
@@ -181,6 +188,7 @@ class Magician:
         *,
         auto_start_queue: bool = True,
         only_known_adapters: bool = False,
+        require_panel: bool | None = None,
         via_broker: bool | str = "auto",
         broker_host: str | None = None,
         broker_port: int | None = None,
@@ -194,13 +202,21 @@ class Magician:
             Print a one-line "Connected to <port>" / "Failed to connect: ..."
             message from :meth:`connect`. Set ``False`` to stay silent.
 
+        ``require_panel``:
+            - ``True`` - connect through the control panel
+              (``pydobotlab-panel``), that is through its
+              :class:`pydobotlab.broker.DobotBroker`; raise if it is not running.
+              The panel and the script then share the arm.
+            - ``False`` - connect through the panel when it is running,
+              otherwise open the serial port directly.
+            - ``None`` (default) - ``True`` when the control panel is
+              installed (``pydobotlab[gui]``), otherwise ``False``.
+
         ``via_broker``:
-            - ``"auto"`` (default) - at connect time, probe localhost for a
-              running :class:`pydobotlab.broker.DobotBroker` and route through
-              it if reachable. Otherwise open the serial port directly. This
-              lets the control-panel GUI and a Python script share an arm.
+            - ``"auto"`` (default) - follow ``require_panel``.
             - ``True`` - require the broker; raise if unreachable.
-            - ``False`` - never use the broker (always direct serial).
+            - ``False`` - never use the broker (always direct serial),
+              whatever ``require_panel`` says.
         """
         config = get_config()
         self._explicit_port = port
@@ -208,6 +224,7 @@ class Magician:
         self._timeout = config["serial"]["timeout"] if timeout is None else timeout
         self._auto_start_queue = auto_start_queue
         self._only_known_adapters = only_known_adapters
+        self._require_panel = is_panel_installed() if require_panel is None else require_panel
         self._via_broker = via_broker
         self._broker_host = config["broker"]["host"] if broker_host is None else broker_host
         self._broker_port = config["broker"]["port"] if broker_port is None else broker_port
@@ -222,9 +239,9 @@ class Magician:
     def connect(self) -> None:
         """Resolve the port (auto-pick if unset), open the line, prep the queue.
 
-        If a :class:`pydobotlab.broker.DobotBroker` is reachable on localhost
-        (the panel runs one), route through it instead of opening the serial
-        port directly. Override with ``via_broker=False``.
+        Connects through the control panel when it is running. When the panel
+        is not running, raises if the panel is required (``require_panel``),
+        otherwise opens the serial port directly.
 
         Prints one line saying which port connected, or why it failed (the
         exception is still raised). Pass ``verbose=False`` to the constructor
@@ -262,6 +279,10 @@ class Magician:
                         f"via_broker=True but no broker reachable at "
                         f"{self._broker_host}:{self._broker_port}"
                     )
+                use_broker = True
+            elif self._via_broker == "auto" and self._require_panel:
+                if not is_broker_reachable(self._broker_host, self._broker_port):
+                    raise DobotConnectionError(get_config()["messages"]["panel_not_running"])
                 use_broker = True
             elif self._via_broker == "auto" and is_broker_reachable(
                 self._broker_host, self._broker_port
@@ -569,8 +590,19 @@ class Magician:
 
     # ---- 3.6.20  Set Home ---------------------------------------------
     def set_home(self) -> bool:
-        """Move the arm to its home position and wait until it arrives."""
-        return self.execute_command(CommandID.SET_HOME_CMD, pack_u32(0))
+        """Move the arm to its home position and wait until it arrives.
+
+        As in DobotLab, this works also during an alarm: the arm homes, and the
+        alarms are cleared when homing ends. Raises if an alarm comes back
+        after clearing, as :meth:`clear_alarm` does.
+        """
+        index = self.queue_command(CommandID.SET_HOME_CMD, pack_u32(0))
+        if self._batch_state.depth:
+            return True
+        self.wait_for(index, raise_on_alarm=False)
+        if self.get_alarms():
+            self.clear_alarm()
+        return True
 
     # ---- 3.6.21  Get Current Pose -------------------------------------
     def get_pose(self) -> Pose:
