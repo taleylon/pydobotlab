@@ -13,7 +13,7 @@ The broker is a local TCP server that owns serial ports and relays Dobot frames 
  └──────────────┘
 ```
 
-By default, `Magician` connects through the broker and raises `DobotConnectionError` when none is running. With `require_panel=False`, it opens the serial port directly when no broker is running. See [`Magician`](../api/magician.md#magician), [Running scripts](running.md#scripts), and the [Broker API](../api/broker.md).
+`Magician` connects through the broker when one is running. When none is running, it raises `DobotConnectionError` if the control panel is installed, and opens the serial port directly otherwise or with `require_panel=False`. See [`Magician`](../api/magician.md#magician), [Running scripts](running.md#scripts), and the [Broker API](../api/broker.md).
 
 ## Wire protocol
 
