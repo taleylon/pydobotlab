@@ -48,6 +48,11 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="N",
         help="In simulator mode, how many fake arms to expose (default 2).",
     )
+    parser.add_argument(
+        "--dev",
+        action="store_true",
+        help="Show each arm's port, alarm names, codes, and raw bytes, and full error details.",
+    )
     return parser.parse_args(argv)
 
 
@@ -96,7 +101,7 @@ def main(argv: list[str] | None = None) -> int:
     app.setOrganizationName("pydobotlab")
     app.setStyleSheet(load_stylesheet())
 
-    hub = HubWindow()
+    hub = HubWindow(developer=arguments.dev)
     if arguments.simulator:
         hub.setWindowTitle(hub.windowTitle() + "  (simulator)")
     hub.show()
