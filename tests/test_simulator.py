@@ -213,10 +213,29 @@ def test_a_script_needs_the_panel_unless_require_panel_is_false(monkeypatch):
     install_simulator(arms=1)
     monkeypatch.setattr(broker_module, "is_broker_reachable", lambda *args, **kwargs: False)
     with pytest.raises(DobotConnectionError, match="panel is not running"):
-        Magician("/dev/sim0", verbose=False).connect()
+        Magician("/dev/sim0", require_panel=True, verbose=False).connect()
 
     with Magician("/dev/sim0", require_panel=False, verbose=False) as script:
         assert isinstance(script._transport, SerialTransport)
+
+
+@pytest.mark.parametrize("panel_installed", [True, False])
+def test_the_panel_is_required_by_default_only_where_it_is_installed(monkeypatch, panel_installed):
+    import pydobotlab.broker as broker_module
+    import pydobotlab.device as device_module
+    from pydobotlab import DobotConnectionError, Magician
+    from pydobotlab.transport import SerialTransport
+
+    install_simulator(arms=1)
+    monkeypatch.setattr(broker_module, "is_broker_reachable", lambda *args, **kwargs: False)
+    monkeypatch.setattr(device_module, "is_panel_installed", lambda: panel_installed)
+    script = Magician("/dev/sim0", verbose=False)
+    if panel_installed:
+        with pytest.raises(DobotConnectionError, match="panel is not running"):
+            script.connect()
+    else:
+        with script:
+            assert isinstance(script._transport, SerialTransport)
 
 
 # ---------------------------------------------------------------------------
