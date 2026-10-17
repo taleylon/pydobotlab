@@ -51,10 +51,10 @@ from .protocol import (
     unpack as unpack,
 )
 
-# Alarm bit set when a target is outside the workspace. Matches the real
-# firmware's PLAN_MOTION_TARGET_OUT_OF_WORKSPACE code (0x14), so students can
-# test their error handling without hardware.
-ALARM_OUT_OF_WORKSPACE_CODE = 0x14
+# Alarm bit set when a target is outside the workspace: PLAN_INVERSE_CALCULATION
+# (0x11), the code the real arm reports for an unreachable target, so students
+# can test their error handling without hardware.
+ALARM_OUT_OF_WORKSPACE_CODE = 0x11
 
 
 # ---------------------------------------------------------------------------
@@ -159,6 +159,7 @@ class QueuedCommand:
     start: Callable[[], list[MotionTarget]]
     wait_seconds: float = 0.0
     waypoints: list[MotionTarget] | None = None  # None until the command starts
+    runs_during_alarm: bool = False  # homing runs also while an alarm is active
 
 
 @dataclass
@@ -246,7 +247,7 @@ class FakeDobot:
             bool(self._queue)
             and self._queue_running
             and self._jog is None
-            and not any(self._alarms)
+            and (not any(self._alarms) or self._queue[0].runs_during_alarm)
         )
 
     def advance_queue(self) -> None:
@@ -277,11 +278,21 @@ class FakeDobot:
             command.wait_seconds -= self._tick_seconds
         self.advance_queue()
 
-    def enqueue(self, start: Callable[[], list[MotionTarget]], wait_seconds: float = 0.0) -> int:
+    def enqueue(
+        self,
+        start: Callable[[], list[MotionTarget]],
+        wait_seconds: float = 0.0,
+        *,
+        runs_during_alarm: bool = False,
+    ) -> int:
         """Add a command to the queue and return its queue index."""
         with self._lock:
             self._queue_added += 1
-            self._queue.append(QueuedCommand(self._queue_added, start, wait_seconds))
+            self._queue.append(
+                QueuedCommand(
+                    self._queue_added, start, wait_seconds, runs_during_alarm=runs_during_alarm
+                )
+            )
             self.advance_queue()
             return self._queue_added
 
@@ -389,7 +400,7 @@ class FakeDobot:
                 MotionTarget(x=home_x, y=home_y, z=home_z, r=home_r),
             ]
 
-        return self.enqueue(start)
+        return self.enqueue(start, runs_during_alarm=True)  # as the real arm does
 
     def set_motion_target(self, x: float, y: float, z: float, r: float) -> int:
         """Queue a point-to-point move to ``(x, y, z, r)``."""

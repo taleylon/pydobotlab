@@ -364,5 +364,9 @@ class BrokerTransport:
                 self._drop_socket()
                 raise DobotTimeoutError(f"broker timeout on {self.port!r}") from error
             except OSError as error:
-                raise DobotConnectionError(f"broker I/O on {self.port!r}: {error}") from error
+                self._drop_socket()
+                raise DobotConnectionError(
+                    f"lost the connection to {self.port!r} through the panel "
+                    f"(was the panel closed?): {error}"
+                ) from error
         return unpack(response)

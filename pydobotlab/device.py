@@ -569,8 +569,19 @@ class Magician:
 
     # ---- 3.6.20  Set Home ---------------------------------------------
     def set_home(self) -> bool:
-        """Move the arm to its home position and wait until it arrives."""
-        return self.execute_command(CommandID.SET_HOME_CMD, pack_u32(0))
+        """Move the arm to its home position and wait until it arrives.
+
+        As in DobotLab, this works also during an alarm: the arm homes, and the
+        alarms are cleared when homing ends. Raises if an alarm comes back
+        after clearing, as :meth:`clear_alarm` does.
+        """
+        index = self.queue_command(CommandID.SET_HOME_CMD, pack_u32(0))
+        if self._batch_state.depth:
+            return True
+        self.wait_for(index, raise_on_alarm=False)
+        if self.get_alarms():
+            self.clear_alarm()
+        return True
 
     # ---- 3.6.21  Get Current Pose -------------------------------------
     def get_pose(self) -> Pose:
