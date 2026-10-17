@@ -47,8 +47,7 @@ With the arm connected and its workspace clear:
 from pydobotlab import Magician
 
 with Magician() as robot:  # auto-discover; or specify "/dev/ttyUSB0" / "COM3"
-    robot.clear_alarm()
-    robot.set_home()
+    robot.set_home()  # homes also from an alarm, as in DobotLab
     robot.ptp(mode=1, x=220, y=0, z=50, r=0)  # MOVJ_XYZ; returns when the arm arrives
     pose = robot.get_pose()
     print(pose)
