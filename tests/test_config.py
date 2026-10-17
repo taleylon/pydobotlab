@@ -47,7 +47,15 @@ def user_directory(tmp_path, monkeypatch):
 
 def test_shipped_file_holds_every_setting():
     config = default_config()
-    assert set(config) == {"serial", "broker", "discovery", "panel", "simulator", "workspace"}
+    assert set(config) == {
+        "serial",
+        "broker",
+        "discovery",
+        "panel",
+        "simulator",
+        "workspace",
+        "messages",
+    }
     assert (config["broker"]["host"], config["broker"]["port"]) == ("127.0.0.1", 8765)
     assert config["serial"]["baudrate"] == 115200
 

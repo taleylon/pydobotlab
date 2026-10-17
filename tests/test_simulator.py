@@ -193,6 +193,32 @@ def test_speed_set_by_one_client_is_used_by_another_through_the_broker():
             assert panel_side.get_arm_speed_ratio(1) == 80.0
 
 
+def test_a_script_connects_through_the_running_panel():
+    from pydobotlab import Magician
+    from pydobotlab.broker import DobotBroker
+    from pydobotlab.transport import BrokerTransport
+
+    install_simulator(arms=1)
+    with DobotBroker(port=0) as broker:
+        with Magician("/dev/sim0", broker_port=broker.port, verbose=False) as script:
+            assert isinstance(script._transport, BrokerTransport)
+            assert broker.client_count() == 1
+
+
+def test_a_script_needs_the_panel_unless_require_panel_is_false(monkeypatch):
+    import pydobotlab.broker as broker_module
+    from pydobotlab import DobotConnectionError, Magician
+    from pydobotlab.transport import SerialTransport
+
+    install_simulator(arms=1)
+    monkeypatch.setattr(broker_module, "is_broker_reachable", lambda *args, **kwargs: False)
+    with pytest.raises(DobotConnectionError, match="panel is not running"):
+        Magician("/dev/sim0", verbose=False).connect()
+
+    with Magician("/dev/sim0", require_panel=False, verbose=False) as script:
+        assert isinstance(script._transport, SerialTransport)
+
+
 # ---------------------------------------------------------------------------
 # 3. Workspace follows the real arm's joint ranges and arm lengths
 # ---------------------------------------------------------------------------

@@ -158,7 +158,9 @@ def test_panel_connects_and_updates_simulated_arm(application, monkeypatch):
     monkeypatch.setattr(serial.tools.list_ports, "comports", serial.tools.list_ports.comports)
     monkeypatch.setattr(simulator, "_INSTALLED", False)
     simulator.install_simulator(arms=1)
-    monkeypatch.setattr(panel_module, "Dobot", lambda port: Dobot(port, via_broker=False))
+    monkeypatch.setattr(
+        panel_module, "Dobot", lambda port, **options: Dobot(port, **options, via_broker=False)
+    )
     panel = None
     try:
         panel = panel_module.ControlPanel("/dev/sim0")
@@ -198,7 +200,9 @@ def test_panel_adopts_the_arm_speed_and_follows_script_changes(application, monk
     monkeypatch.setattr(serial.tools.list_ports, "comports", serial.tools.list_ports.comports)
     monkeypatch.setattr(simulator, "_INSTALLED", False)
     simulator.install_simulator(arms=1)
-    monkeypatch.setattr(panel_module, "Dobot", lambda port: Dobot(port, via_broker=False))
+    monkeypatch.setattr(
+        panel_module, "Dobot", lambda port, **options: Dobot(port, **options, via_broker=False)
+    )
     with Dobot("/dev/sim0", via_broker=False, verbose=False) as script:
         script.motion_params = (30, 30)
     panel = None
@@ -260,7 +264,10 @@ def test_hub_lists_ports_only_and_explains_permission_once(application, monkeypa
         assert notice.count("Permission denied") == 1  # explained once, above the list
         assert notice.endswith("Affected ports: /dev/ttyACM0, /dev/ttyS0")
         assert not any("Permission denied" in line for line in lines)
-        assert "/dev/ttyUSB0    port is busy" in lines
+        assert (
+            "/dev/ttyUSB0    port is busy: close the script or program using it, then Refresh"
+            in lines
+        )
         assert not any("brltty" in line or "try " in line for line in lines)
     finally:
         hub.close()
@@ -340,7 +347,9 @@ def test_hub_and_panel_show_the_version(application, monkeypatch):
     monkeypatch.setattr(serial.tools.list_ports, "comports", serial.tools.list_ports.comports)
     monkeypatch.setattr(simulator, "_INSTALLED", False)
     simulator.install_simulator(arms=1)
-    monkeypatch.setattr(panel_module, "Dobot", lambda port: Dobot(port, via_broker=False))
+    monkeypatch.setattr(
+        panel_module, "Dobot", lambda port, **options: Dobot(port, **options, via_broker=False)
+    )
     hub = HubWindow()
     panel = None
     try:
@@ -355,6 +364,76 @@ def test_hub_and_panel_show_the_version(application, monkeypatch):
             panel.close()
         hub.close()
         simulator.stop_all()
+
+
+@pytest.mark.parametrize(("answer", "quits"), [("No", False), ("Yes", True)])
+def test_hub_asks_before_quitting_while_scripts_are_connected(
+    application, monkeypatch, answer, quits
+):
+    from types import SimpleNamespace
+
+    import pydobotlab.panel.hub as hub_module
+    from pydobotlab import Discovery
+
+    monkeypatch.setattr(Discovery, "discover_with_diagnostics", staticmethod(lambda: ([], [])))
+    questions = []
+
+    def ask(parent, title, text, buttons, default):
+        questions.append(text)
+        return getattr(hub_module.QMessageBox, answer)
+
+    monkeypatch.setattr(hub_module.QMessageBox, "question", ask)
+    hub = hub_module.HubWindow(broker=SimpleNamespace(client_count=lambda: 1))
+    try:
+        hub._worker.wait()
+        hub.show()
+        assert hub.close() is quits
+        assert hub.isVisible() is not quits
+        assert questions == [
+            "1 script is connected to an arm through the control panel.\n"
+            "Quitting disconnects it from the arm.\n\nQuit anyway?"
+        ]
+    finally:
+        hub._broker = None
+        hub.close()
+
+
+def test_a_panel_window_keeps_the_queued_moves_of_a_script(application, simulated_arm, monkeypatch):
+    import time
+
+    import pydobotlab.panel.panel as panel_module
+    from pydobotlab import Discovery, Dobot
+    from pydobotlab.broker import DobotBroker
+    from pydobotlab.panel.hub import HubWindow
+
+    monkeypatch.setattr(Discovery, "discover_with_diagnostics", staticmethod(lambda: ([], [])))
+    with DobotBroker(port=0) as broker:
+        through_broker = {"via_broker": True, "broker_port": broker.port, "verbose": False}
+        monkeypatch.setattr(
+            panel_module,
+            "Dobot",
+            lambda port, **options: Dobot(port, **{**options, **through_broker}),
+        )
+        hub = HubWindow(broker=broker)
+        try:
+            hub._worker.wait()
+            with Dobot("/dev/sim0", **through_broker) as script:
+                script.move_to(200, 0, 50)
+                script.move_to(250, 50, 30, wait=False)
+                last_move = script.move_to(200, -50, 30, wait=False)
+                hub.open_panel("/dev/sim0")  # the window opens and closes during the moves
+                assert hub.script_count() == 1  # the panel window is not counted
+                hub._panels["/dev/sim0"].close()
+                script.wait_for(last_move, timeout=15)
+                pose = script.get_pose()
+                assert (round(pose.x), round(pose.y), round(pose.z)) == (200, -50, 30)
+
+            deadline = time.monotonic() + 5
+            while hub.script_count() and time.monotonic() < deadline:
+                time.sleep(0.01)
+            assert hub.script_count() == 0
+        finally:
+            hub.close()
 
 
 def test_hub_runs_one_scan_at_a_time(application, monkeypatch):
@@ -404,7 +483,9 @@ def test_watchdog_disconnects_only_after_consecutive_failures(application, monke
     monkeypatch.setattr(serial.tools.list_ports, "comports", serial.tools.list_ports.comports)
     monkeypatch.setattr(simulator, "_INSTALLED", False)
     simulator.install_simulator(arms=1)
-    monkeypatch.setattr(panel_module, "Dobot", lambda port: Dobot(port, via_broker=False))
+    monkeypatch.setattr(
+        panel_module, "Dobot", lambda port, **options: Dobot(port, **options, via_broker=False)
+    )
     panel = None
     try:
         panel = panel_module.ControlPanel("/dev/sim0")
@@ -456,7 +537,9 @@ def simulated_arm(monkeypatch):
     monkeypatch.setattr(serial.tools.list_ports, "comports", serial.tools.list_ports.comports)
     monkeypatch.setattr(simulator, "_INSTALLED", False)
     simulator.install_simulator(arms=1)
-    monkeypatch.setattr(panel_module, "Dobot", lambda port: Dobot(port, via_broker=False))
+    monkeypatch.setattr(
+        panel_module, "Dobot", lambda port, **options: Dobot(port, **options, via_broker=False)
+    )
     yield simulator.get_or_create_fake("/dev/sim0")
     simulator.stop_all()
 
