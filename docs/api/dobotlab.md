@@ -37,6 +37,7 @@
 
 - When the arm reports an alarm, a function raises a [`DobotAlarmError`](errors.md#dobotalarmerror) subclass instead of returning `False`.
 - [`clear_alarm`](alarms.md#clear_alarm) also raises when an alarm is active again after clearing.
+- [`set_home`](motion.md#set_home) homes also during an alarm, as the Home button of DobotLab does, and clears the alarms when homing ends.
 - Inside [`batch`](queue.md#batch), the functions queue their command and return at once.
 - `get_pose()` returns a [`Pose`](motion.md#pose), which unpacks as `x, y, z, r, joints`.
 - [`set_conveyor`](accessories.md#set_conveyor) is an alias for `set_converyor`. [`Magician.Stepper1` and `Magician.Stepper2`](magician.md#stepper1) select conveyor motors 0 and 1.

@@ -27,7 +27,7 @@ DobotError
 | [`DobotProtocolError`](#dobotprotocolerror) | A malformed frame was received. |
 | [`DobotTimeoutError`](#dobottimeouterror) | A response or wait timed out. |
 | [`DobotAlarmError`](#dobotalarmerror) | The arm reported an alarm. |
-| [`DobotKinematicError`](#dobotkinematicerror) | A planning, kinematic, or joint-limit alarm. |
+| [`DobotKinematicError`](#dobotkinematicerror) | A planning, motion, or limit alarm. |
 | [`DobotOverspeedError`](#dobotoverspeederror) | A joint over-speed alarm. |
 | [`DobotLostStepError`](#dobotloststeperror) | A lost-step alarm. |
 | [`DobotSystemAlarmError`](#dobotsystemalarmerror) | A system alarm. |
@@ -89,7 +89,7 @@ DobotAlarmError(alarms=None, message="")
 
 The arm reported an alarm. Raised by every DobotLab function that changes the arm state, such as [`ptp`](motion.md#ptp), and by [`move_to`](motion.md#move_to), [`wait_for`](queue.md#wait_for), [`wait_idle`](queue.md#wait_idle), [`batch`](queue.md#batch), [`clear_alarm`](alarms.md#clear_alarm), and [`ensure_no_alarms`](alarms.md#ensure_no_alarms). The arm refuses further commands until the alarm is cleared with [`clear_alarm`](alarms.md#clear_alarm) or the panel's Clear Alarm button. See [Alarms and recovery](../guide/alarms.md).
 
-The subclass follows the category of the alarm, as listed under [`Alarm`](alarms.md#alarm). The message lists each active alarm with a remedy.
+The subclass follows the group of the alarm, as listed under [Alarm groups](alarms.md#alarm-groups). The message lists each active alarm with a remedy.
 
 | Attribute | Type | Description |
 |---|---|---|
@@ -99,7 +99,7 @@ The subclass follows the category of the alarm, as listed under [`Alarm`](alarms
 
 ## `DobotKinematicError` {#dobotkinematicerror}
 
-Subclass of [`DobotAlarmError`](#dobotalarmerror). A planning, kinematic, or joint-limit alarm, for example a target outside the [workspace](../guide/workspace.md).
+Subclass of [`DobotAlarmError`](#dobotalarmerror). A planning, motion, or limit alarm (`PLAN_*`, `MOVE_*`, `LIMIT_*`), for example a target outside the [workspace](../guide/workspace.md).
 
 ---
 

@@ -30,7 +30,7 @@ After the call, `Magician`, port discovery, the broker, and the control panel us
 
 **Notes**
 
-Point-to-point targets outside the [workspace](../guide/workspace.md) of the real arm set the `PLAN_MOTION_TARGET_OUT_OF_WORKSPACE` alarm.
+Point-to-point targets outside the [workspace](../guide/workspace.md) of the real arm set the `PLAN_INVERSE_CALCULATION` alarm, as on the real arm.
 
 **Example**
 

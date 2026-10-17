@@ -6,7 +6,7 @@ Module `pydobotlab.broker`. A broker is a local TCP server that owns serial port
 |---|---|
 | [`DobotBroker`](#dobotbroker) | TCP broker for serial ports. |
 | [`DobotBroker.start`](#dobotbroker-start) | Start serving. |
-| [`DobotBroker.stop`](#dobotbroker-stop) | Stop serving and close all ports. |
+| [`DobotBroker.stop`](#dobotbroker-stop) | Stop serving, disconnect clients, and close all ports. |
 | [`DobotBroker.attach`](#dobotbroker-attach) | Open a port and manage it. |
 | [`DobotBroker.detach`](#dobotbroker-detach) | Close a managed port. |
 | [`DobotBroker.attached_ports`](#dobotbroker-attached_ports) | List the managed ports. |
@@ -73,7 +73,7 @@ Start serving on a background thread. Has no effect if the broker is already run
 DobotBroker.stop() -> None
 ```
 
-Stop serving and close all attached ports.
+Stop serving and close all attached ports. Connected clients are disconnected without waiting for them; their next command raises [`DobotConnectionError`](errors.md#dobotconnectionerror).
 
 ---
 
