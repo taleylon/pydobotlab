@@ -20,6 +20,7 @@ Select an arm and click *Open Control Panel*. Each arm has its own window.
 |---|---|---|
 | `--simulator`, `-s` | off | Use [simulated arms](../getting-started/simulator.md) instead of hardware. |
 | `--simulator-arms N` | `2` | Number of simulated arms. Applies with `--simulator`. |
+| `--dev` | off | Show each arm's port, alarm names, codes, and raw bytes, and full error details. |
 
 ```bash
 pydobotlab-panel --simulator --simulator-arms 3
