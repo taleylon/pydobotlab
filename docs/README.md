@@ -54,5 +54,6 @@ Scripts and the panel both use the `Magician` class. While the panel is running,
 
 - [Dobot Communication Protocol V1.1.5](Dobot-Communication-Protocol-V1.1.5.pdf)
 - [Dobot Magician V2 User Guide (DobotLab-based) V2.3.1](Dobot-Magician-V2-User-Guide-V2.3.1.pdf)
+- [Dobot Magician ALARM Description V1.0.1](Dobot-Magician-ALARM-Description.pdf)
 - [Dobot Magician product page](https://www.dobot-robots.com/products/education/magician.html)
 - [Source repository](https://github.com/taleylon/pydobotlab)
