@@ -20,11 +20,28 @@ Select an arm and click *Open Control Panel*. Each arm has its own window.
 |---|---|---|
 | `--simulator`, `-s` | off | Use [simulated arms](../getting-started/simulator.md) instead of hardware. |
 | `--simulator-arms N` | `2` | Number of simulated arms. Applies with `--simulator`. |
-| `--dev` | off | Show each arm's port, alarm names, codes, and raw bytes, and full error details. |
+| `--dev` | off | Show each arm's port, alarm names, codes, and raw bytes, full error details, and the ports tried when no arm is found. |
+| `--create-shortcut` | off | Create a [desktop shortcut](#shortcut) for the panel, then exit. |
 
 ```bash
 pydobotlab-panel --simulator --simulator-arms 3
 ```
+
+## Desktop shortcut {#shortcut}
+
+```bash
+pydobotlab-panel --create-shortcut
+```
+
+Creates shortcuts that start the panel with the Python installation they were created from, for example a virtual environment or a system-wide installation.
+
+| System | Shortcuts |
+|---|---|
+| Windows | Desktop and Start menu. |
+| Linux | Desktop and application menu. If the desktop icon shows a warning, right-click it and choose *Allow Launching*. |
+| Linux, with `sudo` | Application menu of every user, in `/usr/local/share/applications`. Each user can add a desktop icon by running the command without `sudo`. |
+
+After the Python installation moves, run the command again. To remove a shortcut, delete it; on Linux, the menu entry of a user is `~/.local/share/applications/pydobotlab-panel.desktop`.
 
 ## Connection
 
@@ -48,5 +65,5 @@ python my_script.py       # terminal 2
 
 ## Troubleshooting
 
-- **No arms listed.** The hub lists each port that could not be opened, with the reason: a permission problem, `port is busy`, or `couldn't open`. Ports that answered, but not as a Dobot Magician, are under *Other devices (n)*. On Linux, see [Linux setup](../getting-started/linux.md). `python -m serial.tools.list_ports` shows the ports the operating system reports.
+- **No arms listed.** The hub says why when the cause is known: a permission problem, or a busy port. With `--dev`, it lists each port that could not be opened, with the reason (a permission problem, `port is busy`, or `couldn't open`), and the ports that answered, but not as a Dobot Magician, under *Other devices (n)*. On Linux, see [Linux setup](../getting-started/linux.md). `python -m serial.tools.list_ports` shows the ports the operating system reports.
 - **Port busy.** Another program holds the port: another panel, DobotStudio, or a script that opened the port directly before the panel started. Close it, then click *Refresh*. A process that has exited does not hold the port.

@@ -10,7 +10,7 @@ python -m pip install "pydobotlab[gui]"
 
 ## Windows
 
-**Hub.** Lists the arms found as *Dobot Magician 1*, *Dobot Magician 2*, and so on, numbered in the order they are found; an arm keeps its number while the panel runs. With `--dev`, each arm's port (`COM3`, `/dev/ttyACM0`) is shown after its name, in the hub and in its control panel. Only ports identified as a Dobot Magician ([Discovery](../api/discovery.md)) are listed as arms; ports that answer otherwise are under *Other devices (n)*, below a line, collapsed until clicked. A permission problem is explained in a box above the list. *Refresh* scans again. *Open Control Panel* opens a control panel for the selected arm.
+**Hub.** Lists the arms found as *Dobot Magician 1*, *Dobot Magician 2*, and so on, numbered in the order they are found; an arm keeps its number while the panel runs. With `--dev`, each arm's port (`COM3`, `/dev/ttyACM0`) is shown after its name, in the hub and in its control panel. Only ports identified as a Dobot Magician ([Discovery](../api/discovery.md)) are listed as arms; ports that answer otherwise are under *Other devices (n)*, below a line, collapsed until clicked. When no arm is found, the hub says so and why, if known; the ports tried are listed only with `--dev`. A permission problem is explained in a box above the list. *Refresh* scans again. *Open Control Panel* opens a control panel for the selected arm.
 
 The hub and each control panel show the pydobotlab version at the bottom right.
 
