@@ -42,6 +42,9 @@ it running while scripts run:
 pydobotlab-panel
 ```
 
+`pydobotlab-panel --create-shortcut` adds a desktop shortcut for the panel on
+Windows and Linux.
+
 Then run a script; it connects through the panel:
 
 ```python
