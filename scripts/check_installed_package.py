@@ -15,6 +15,9 @@ assert pydobotlab.__version__ == version("pydobotlab")
 assert files("pydobotlab.panel").joinpath("style.qss").read_text(encoding="utf-8").strip()
 assert files("pydobotlab").joinpath("config.toml").read_text(encoding="utf-8").strip()
 assert files("pydobotlab.panel").joinpath("panel.toml").read_text(encoding="utf-8").strip()
+assert files("pydobotlab.panel").joinpath("icon.png").read_bytes().startswith(b"\x89PNG")
+assert files("pydobotlab.panel").joinpath("icon.ico").read_bytes()[:4] == b"\x00\x00\x01\x00"
+assert parse_arguments(["--create-shortcut"]).create_shortcut
 assert short_text(0x44) == "The forearm (J3) reached its limit. Jog J3- to move it back."
 assert "require_panel=False" in default_config()["messages"]["panel_not_running"]
 assert PANEL_CONFIG["hub"]["quit_dialog"]["title"]
