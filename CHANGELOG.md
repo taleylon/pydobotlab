@@ -2,6 +2,22 @@
 
 All notable changes to pydobotlab. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.1.1] - 2026-10-18
+
+### Added
+
+- Control panel:
+  - `pydobotlab-panel --create-shortcut` creates a desktop shortcut and a menu entry for the panel on Windows and Linux. The shortcut starts the panel with the Python installation that created it. On Linux with `sudo`, for example after `sudo pip install --break-system-packages`, it creates a menu entry for every user.
+  - The panel has an icon, shown on its windows, the Windows taskbar, and the Ubuntu dock.
+
+### Changed
+
+- Control panel: when no Dobot Magician is found, the hub says why, if known (a permission problem or a busy port), without listing the ports it tried. `pydobotlab-panel --dev` lists them, with *Other devices (n)*.
+
+### Documentation
+
+- Desktop shortcut: creating, updating, and removing the panel's shortcuts on Windows and Linux.
+
 ## [0.2.1] - 2026-10-17
 
 ### Changed (breaking)
@@ -150,6 +166,7 @@ All notable changes to pydobotlab. The format follows [Keep a Changelog](https:/
 
 First release: the Python functions of the DobotLab Magician manual over serial, the firmware command queue, alarms, pose streaming, port discovery, the broker, the PySide6 control panel, and the simulator.
 
+[0.2.1.1]: https://github.com/taleylon/pydobotlab/compare/v0.2.1...v0.2.1.1
 [0.2.1]: https://github.com/taleylon/pydobotlab/compare/v0.2...v0.2.1
 [0.2]: https://github.com/taleylon/pydobotlab/compare/v0.1.0.1...v0.2
 [0.1.0.1]: https://github.com/taleylon/pydobotlab/compare/v0.1.0...v0.1.0.1

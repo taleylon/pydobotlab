@@ -133,6 +133,14 @@ def test_pad_paints_in_every_state(application):
         pad.close()
 
 
+def test_panel_windows_show_the_pydobotlab_icon(application):
+    from pydobotlab.panel.app import show_panel_icon
+
+    show_panel_icon(application)
+    assert not application.windowIcon().isNull()
+    assert application.desktopFileName() == "pydobotlab-panel"  # the shortcut's .desktop file
+
+
 def test_jump_parameter_update_does_not_echo(application):
     from pydobotlab.panel.widgets import JumpParamsCard
 
@@ -239,27 +247,51 @@ def listed_rows(hub) -> list[str]:
     return rows
 
 
-def test_hub_lists_ports_only_and_explains_permission_once(application, monkeypatch):
-    from pydobotlab import DiscoveredDobot, Discovery, ProbeFailure
+FAILED_PORTS = [
+    ("/dev/ttyACM0", "permission", "Permission denied for X: join"),
+    ("/dev/ttyS0", "permission", "Permission denied for Y: join"),
+    ("/dev/ttyUSB0", "busy", "locked"),
+    ("/dev/ttyS1", "no_reply", "'/dev/ttyS1' is not a Dobot Magician"),
+]
+
+
+def test_without_a_magician_the_hub_says_why_without_listing_the_ports(application, monkeypatch):
+    from pydobotlab import Discovery, ProbeFailure
     from pydobotlab.panel.hub import HubWindow
 
     monkeypatch.setattr(Discovery, "discover_with_diagnostics", staticmethod(lambda: ([], [])))
     hub = HubWindow()
     try:
         hub._worker.wait()
-        hub.show_discovery_results([DiscoveredDobot(port="COM3", serial_number="DT1234567890")])
-        assert listed_rows(hub) == ["Dobot Magician 1", "---", "Other devices (0)"]
+        failures = [ProbeFailure(port, "", reason, detail) for port, reason, detail in FAILED_PORTS]
+        hub.show_discovery_results([], failures)
+        assert listed_rows(hub) == [
+            NO_MAGICIAN_NOTE
+            + "\nA serial port is busy. Close the script or program using it, then click Refresh."
+        ]
+        assert hub._notice.text() == "Permission denied for X: join"  # the cause, no port list
+        assert hub.statusBar().currentMessage() == "no Dobot Magician devices found"
+    finally:
+        hub.close()
 
-        hub.show_discovery_results(
-            [],
-            [
-                ProbeFailure("/dev/ttyACM0", "", "permission", "Permission denied for X: join"),
-                ProbeFailure("/dev/ttyS0", "", "permission", "Permission denied for Y: join"),
-                ProbeFailure("/dev/ttyUSB0", "", "busy", "locked"),
-            ],
-        )
+
+def test_developer_hub_lists_ports_only_and_explains_permission_once(application, monkeypatch):
+    from pydobotlab import DiscoveredDobot, Discovery, ProbeFailure
+    from pydobotlab.panel.hub import HubWindow
+
+    monkeypatch.setattr(Discovery, "discover_with_diagnostics", staticmethod(lambda: ([], [])))
+    hub = HubWindow(developer=True)
+    try:
+        hub._worker.wait()
+        hub.show_discovery_results([DiscoveredDobot(port="COM3", serial_number="DT1234567890")])
+        assert listed_rows(hub) == ["Dobot Magician 1    COM3", "---", "Other devices (0)"]
+
+        failures = [ProbeFailure(port, "", reason, detail) for port, reason, detail in FAILED_PORTS]
+        hub.show_discovery_results([], failures)
         lines = listed_rows(hub)
         assert lines[0] == NO_MAGICIAN_NOTE
+        assert lines[-2:] == ["---", "Other devices (1)"]
+        assert hub.statusBar().currentMessage().endswith("ports tried: 4 - hover for details")
         notice = hub._notice.text()
         assert notice.count("Permission denied") == 1  # explained once, above the list
         assert notice.endswith("Affected ports: /dev/ttyACM0, /dev/ttyS0")
@@ -305,7 +337,8 @@ def test_hub_groups_other_devices_in_a_collapsed_list(application, monkeypatch, 
     from pydobotlab.panel.hub import HubWindow
 
     monkeypatch.setattr(Discovery, "discover_with_diagnostics", staticmethod(lambda: ([], [])))
-    hub = HubWindow()
+    # Without a Magician, only developer mode lists the other devices.
+    hub = HubWindow(developer=not magician_found)
     try:
         hub._worker.wait()
         devices = [DiscoveredDobot(port="/dev/ttyACM0", serial_number="DT1")] * magician_found
@@ -465,7 +498,7 @@ def test_hub_runs_one_scan_at_a_time(application, monkeypatch):
             time.sleep(0.01)
 
         assert len(scans) == 2  # the requested scan ran after the first one
-        assert listed_rows(hub) == [NO_MAGICIAN_NOTE, "---", "Other devices (0)"]
+        assert listed_rows(hub) == [NO_MAGICIAN_NOTE]
     finally:
         scan_may_finish.set()
         hub.close()

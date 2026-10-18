@@ -196,24 +196,57 @@ class HubWindow(QMainWindow):
             self._device_list.addTopLevelItem(item)
 
         if not devices:
-            self.add_note(
-                "No Dobot Magician devices were found.\n"
-                "Check the USB cable and power, then click Refresh."
-            )
-            # A port that could not be opened may still hold a Magician. Permission
-            # failures share one cause (e.g. missing dialout group), so the
-            # explanation is shown once instead of once per port.
-            permission_failures = [f for f in open_failures if f.reason == "permission"]
-            if permission_failures:
-                ports = ", ".join(f.port for f in permission_failures)
-                self._notice.setText(f"{permission_failures[0].detail}\nAffected ports: {ports}")
-                self._notice.setVisible(True)
-            for failure in open_failures:
-                if failure.reason == "permission":
-                    continue
-                hint = HUB_TEXT["port_problems"].get(failure.reason, failure.reason)
-                self.add_note(f"{failure.port}    {hint}", failure.detail)
+            self.show_not_found(open_failures)
+        # Without a Dobot Magician, only developer mode lists the ports that were tried.
+        if devices or self._developer:
+            self.add_other_devices(other_devices)
 
+        not_found = HUB_TEXT["not_found"]
+        if devices:
+            num_of_devices = len(devices)
+            device_str = "device" if num_of_devices == 1 else "devices"
+            self.statusBar().showMessage(
+                f"{num_of_devices} Dobot Magician {device_str} found", 3000
+            )
+        elif failures and self._developer:
+            self.statusBar().showMessage(
+                not_found["status_ports_tried"].format(count=len(failures)), 6000
+            )
+        else:
+            self.statusBar().showMessage(not_found["status"], 3000)
+
+    def show_not_found(self, open_failures: list) -> None:
+        """Say that no Dobot Magician was found, and why when it is known.
+
+        ``open_failures`` are the ports that could not be opened; one of them
+        may hold a Magician. Developer mode lists each of them.
+        """
+        not_found = HUB_TEXT["not_found"]
+        busy = any(failure.reason == "busy" for failure in open_failures)
+        note = not_found["note"]
+        if busy and not self._developer:
+            note += "\n" + not_found["busy"]
+        self.add_note(note)
+        # Permission failures share one cause (e.g. missing dialout group), so the
+        # explanation is shown once instead of once per port.
+        permission_failures = [f for f in open_failures if f.reason == "permission"]
+        if permission_failures:
+            text = permission_failures[0].detail
+            if self._developer:
+                ports = ", ".join(f.port for f in permission_failures)
+                text += "\n" + not_found["affected_ports"].format(ports=ports)
+            self._notice.setText(text)
+            self._notice.setVisible(True)
+        if not self._developer:
+            return
+        for failure in open_failures:
+            if failure.reason == "permission":
+                continue
+            hint = HUB_TEXT["port_problems"].get(failure.reason, failure.reason)
+            self.add_note(f"{failure.port}    {hint}", failure.detail)
+
+    def add_other_devices(self, other_devices: list) -> None:
+        """A line, then the ports that answered, but not as a Dobot Magician, collapsed."""
         separator = QTreeWidgetItem()
         separator.setFlags(Qt.NoItemFlags)
         separator.setSizeHint(0, QSize(0, 9))
@@ -223,7 +256,6 @@ class HubWindow(QMainWindow):
         line.setFixedHeight(1)
         self._device_list.setItemWidget(separator, 0, line)
 
-        # Ports that answered, but not as a Dobot Magician: collapsed by default.
         group = QTreeWidgetItem([f"Other devices ({len(other_devices)})"])
         group.setFlags(Qt.ItemIsEnabled)
         group.setForeground(0, Qt.gray)
@@ -232,23 +264,6 @@ class HubWindow(QMainWindow):
             description = failure.description.removesuffix(f" ({failure.port})")
             text = f"{failure.port}    {description}" if description else failure.port
             self.add_note(text, failure.detail, parent=group)
-
-        if devices:
-            num_of_devices = len(devices)
-            device_str = "device" if num_of_devices == 1 else "devices"
-            self.statusBar().showMessage(
-                f"{num_of_devices} Dobot Magician {device_str} found", 3000
-            )
-        elif failures:
-            num_of_failures = len(failures)
-            failure_str = "port" if num_of_failures == 1 else "ports"
-            self.statusBar().showMessage(
-                f"no Dobot Magician devices found; {len(failures)} {failure_str} tried"
-                " - hover for details",
-                6000,
-            )
-        else:
-            self.statusBar().showMessage("no Dobot Magician devices found", 3000)
 
     def show_discovery_error(self, message: str) -> None:
         if not self.finish_scan():
