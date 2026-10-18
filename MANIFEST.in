@@ -1,5 +1,5 @@
 include LICENSE README.md CHANGELOG.md
-recursive-include pydobotlab *.py *.qss
+recursive-include pydobotlab *.py *.qss *.toml *.png *.ico
 recursive-include tests *.py
 recursive-include examples *.py
 recursive-include docs *.md
