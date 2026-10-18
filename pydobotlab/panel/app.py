@@ -3,6 +3,11 @@
 Enables the option to run it through the ``pydobotlab-panel`` console script after installing
 ``pip install pydobotlab[gui]``, or with ``python -m pydobotlab.panel``.
 
+Desktop shortcut
+----------------
+
+    pydobotlab-panel --create-shortcut            # desktop icon and menu entry
+
 Simulator mode
 --------------
 
@@ -51,14 +56,42 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--dev",
         action="store_true",
-        help="Show each arm's port, alarm names, codes, and raw bytes, and full error details.",
+        help="Show each arm's port, alarm names, codes, and raw bytes, full error details, "
+        "and the ports tried when no arm is found.",
+    )
+    parser.add_argument(
+        "--create-shortcut",
+        action="store_true",
+        help="Create a desktop shortcut and a menu entry for the panel, then exit. "
+        "On Linux with sudo, a menu entry for every user.",
     )
     return parser.parse_args(argv)
+
+
+def show_panel_icon(app) -> None:
+    """Show the pydobotlab icon on the windows, the taskbar, and the Linux dock."""
+    from PySide6.QtGui import QIcon
+
+    from .shortcut import ICON_PNG, SHORTCUT
+
+    app.setWindowIcon(QIcon(str(ICON_PNG)))
+    # Linux matches the windows to the .desktop file of --create-shortcut by this name.
+    app.setDesktopFileName(SHORTCUT["desktop_id"])
+    if sys.platform == "win32":
+        import ctypes
+
+        # Without its own id, Windows groups the panel under Python and shows Python's icon.
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(SHORTCUT["windows_app_id"])
 
 
 def main(argv: list[str] | None = None) -> int:
     """Launch the GUI. Returns the Qt exit code."""
     arguments = parse_arguments(argv if argv is not None else sys.argv[1:])
+
+    if arguments.create_shortcut:
+        from .shortcut import main as create_shortcuts
+
+        return create_shortcuts()
 
     if arguments.simulator:
         # Patch serial backend BEFORE any serial-touching imports happen.
@@ -76,9 +109,11 @@ def main(argv: list[str] | None = None) -> int:
     try:
         from PySide6.QtWidgets import QApplication
     except ImportError:
-        sys.stderr.write(
+        # print, not sys.stderr.write: under pythonw.exe there is no stderr.
+        print(
             "PySide6 is not installed. Install the GUI extras with:\n"
-            "    pip install pydobotlab[gui]\n"
+            "    pip install pydobotlab[gui]",
+            file=sys.stderr,
         )
         return 2
 
@@ -92,10 +127,13 @@ def main(argv: list[str] | None = None) -> int:
             broker.start()
             started_here = True
         except OSError as error:
-            sys.stderr.write(f"warning: could not start local broker: {error}\n")
+            print(f"warning: could not start local broker: {error}", file=sys.stderr)
+
+    from .shortcut import SHORTCUT
 
     app = QApplication(sys.argv[:1])  # Qt only wants progname
-    app.setApplicationName("pydobotlab")
+    app.setApplicationName(SHORTCUT["application_name"])
+    show_panel_icon(app)
     if arguments.simulator:
         app.setApplicationDisplayName("pydobotlab - SIMULATOR")
     app.setOrganizationName("pydobotlab")
