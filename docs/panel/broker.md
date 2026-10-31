@@ -64,6 +64,8 @@ A client may be idle between requests for any length of time. A frame that start
 
 A port requested by a client and not yet attached is opened on demand. The broker closes it when its last client disconnects. A port opened with [`DobotBroker.attach`](../api/broker.md#dobotbroker-attach) stays open until it is detached or the broker stops.
 
+When the serial link of a port fails (code `2`), for example because the arm was switched off, the broker closes the port at once. The operating system can then give the arm the same port name when it comes back. Clients still connected to the old port get code `2` for each request; the next client to attach opens the port again.
+
 Requests for one port are handled one at a time, so clients never receive partial frames.
 
 ## Disabling the broker
