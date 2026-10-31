@@ -14,7 +14,8 @@ and a version that is already published is skipped.
 
 Environment: ``DESTINATION`` (``pypi`` or ``testpypi``), ``GITHUB_TOKEN``, and
 the defaults ``GITHUB_EVENT_NAME``, ``GITHUB_REF``, ``GITHUB_REPOSITORY``,
-``GITHUB_SHA``, and ``GITHUB_OUTPUT`` (receives ``publish=true|false``).
+``GITHUB_SHA``, and ``GITHUB_OUTPUT`` (receives ``publish=true|false`` and
+``version=<version>``).
 """
 
 from __future__ import annotations
@@ -154,6 +155,7 @@ def main() -> int:
     if output:
         with Path(output).open("a", encoding="utf-8") as file:
             file.write(f"publish={'true' if publish else 'false'}\n")
+            file.write(f"version={version}\n")
     return 0
 
 

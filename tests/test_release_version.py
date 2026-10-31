@@ -86,6 +86,27 @@ def test_a_direct_push_has_no_merged_branch(monkeypatch):
     assert release.merged_branch("taleylon/pydobotlab", "abc123", "") == ""
 
 
+def test_merging_the_version_pull_request_tells_the_workflow_to_publish_and_release(
+    monkeypatch, tmp_path
+):
+    output = tmp_path / "github_output"
+    monkeypatch.setattr(release, "package_version", lambda: Version("0.2.1.1"))
+    monkeypatch.setattr(release, "published_versions", lambda url: [Version("0.2.1")])
+    monkeypatch.setattr(release, "merged_branch", lambda repository, sha, token: "v0.2.1.1")
+    monkeypatch.delenv("DESTINATION", raising=False)
+    environment = {
+        "GITHUB_EVENT_NAME": "push",
+        "GITHUB_REPOSITORY": "taleylon/pydobotlab",
+        "GITHUB_SHA": "abc123",
+        "GITHUB_OUTPUT": str(output),
+    }
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
+    assert release.main() == 0
+    # The GitHub release job takes the version from here.
+    assert output.read_text(encoding="utf-8") == "publish=true\nversion=0.2.1.1\n"
+
+
 # -- manual runs ----------------------------------------------------------------------
 
 

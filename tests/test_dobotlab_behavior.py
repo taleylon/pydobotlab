@@ -57,6 +57,14 @@ def position(arm: Magician) -> tuple[float, float, float]:
 # -- setters wait and return True -------------------------------------------------
 
 
+def test_motion_params_saves_the_speed_of_this_arm(robot):
+    from pydobotlab.config import saved_arm_speed
+
+    robot.motion_params = 40, 20
+    assert robot.motion_params == (40, 20)
+    assert saved_arm_speed(robot.get_device_serial_number()) == 40  # the panel sets it
+
+
 def test_ptp_returns_true_after_the_move_has_ended(robot):
     assert robot.ptp(mode=1, x=250, y=30, z=20, r=0) is True
     assert position(robot) == (250, 30, 20)
