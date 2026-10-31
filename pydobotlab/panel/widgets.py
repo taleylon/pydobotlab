@@ -9,25 +9,36 @@ Two headline widgets:
 * :class:`CoordReadout` - a vertical stack of (label, value) rows for one
   coordinate system. Used twice in the panel: once for ``X / Y / Z / R``
   next to the Cartesian jog pads, once for ``J1..J4`` next to the joint
-  jog pads.
+  jog pads. A value can be clicked and a target typed into it.
 """
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QPointF, QRectF, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPolygonF
+from PySide6.QtCore import QEvent, QLocale, QPointF, QRectF, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import (
+    QColor,
+    QDoubleValidator,
+    QFont,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QPolygonF,
+)
 from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QSizePolicy,
     QWidget,
 )
 
 from pydobotlab import __version__
 from pydobotlab.protocol import JOGCmd
+
+from .panel_config import PANEL_CONFIG
 
 # Segment names. A pad uses exactly one of these two sets:
 #   diagonal - the disc is cut by an X, giving top / right / bottom / left
@@ -256,6 +267,77 @@ class JogPad(QWidget):
         painter.end()
 
 
+class PoseField(QLineEdit):
+    """One value of a pose readout: the live value, or a target being typed.
+
+    A click starts editing: the value stops following the arm and is
+    selected. Enter emits ``entered(value)``; Esc or a click elsewhere
+    cancels. Either way the live value shows again.
+    """
+
+    entered = Signal(float)
+
+    def __init__(self, parent=None) -> None:
+        super().__init__("0.00", parent)
+        self.setObjectName("poseValue")
+        self.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.setToolTip(PANEL_CONFIG["pose_entry"]["tooltip"])
+        validator = QDoubleValidator(-9999.0, 9999.0, 3, self)
+        validator.setNotation(QDoubleValidator.StandardNotation)
+        validator.setLocale(QLocale.c())  # a point as the decimal separator in every locale
+        self.setValidator(validator)
+        self._live_text = "0.00"
+        self.editing = False
+        self.returnPressed.connect(self.submit)
+
+    def show_value(self, value: float) -> None:
+        """Show the arm's value, unless a target is being typed."""
+        self._live_text = f"{value:.2f}"
+        if not self.editing:
+            self.setText(self._live_text)
+
+    def start_editing(self) -> None:
+        self.editing = True
+        QTimer.singleShot(0, self.selectAll)  # after the click has placed the cursor
+
+    def stop_editing(self) -> None:
+        self.editing = False
+        self.setText(self._live_text)
+
+    def submit(self) -> None:
+        if not self.editing:
+            return
+        try:
+            value = float(self.text())
+        except ValueError:
+            return
+        self.stop_editing()
+        self.clearFocus()
+        self.entered.emit(value)
+
+    def mousePressEvent(self, event) -> None:
+        super().mousePressEvent(event)
+        if not self.editing:
+            self.start_editing()
+
+    def focusInEvent(self, event) -> None:
+        super().focusInEvent(event)
+        if not self.editing:
+            self.start_editing()
+
+    def focusOutEvent(self, event) -> None:
+        super().focusOutEvent(event)
+        if self.editing:
+            self.stop_editing()
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key_Escape and self.editing:
+            self.stop_editing()
+            self.clearFocus()
+            return
+        super().keyPressEvent(event)
+
+
 class CoordReadout(QFrame):
     """Vertical stack of (label, value) rows for one coordinate system.
 
@@ -263,7 +345,12 @@ class CoordReadout(QFrame):
     the X/Y and Z/R jog pads, once for joints (J1..J4) sitting next to the
     J1/J2 and J3/J4 jog pads. Matches the original DobotLab layout where
     each coord system's numeric readout shares a row with its jog controls.
+
+    Each value is a :class:`PoseField`; ``entered(name, value)`` is emitted
+    when a target is typed into one.
     """
+
+    entered = Signal(str, float)
 
     def __init__(self, labels: list[str], parent=None) -> None:
         super().__init__(parent)
@@ -275,22 +362,21 @@ class CoordReadout(QFrame):
         layout.setHorizontalSpacing(10)
         layout.setVerticalSpacing(8)
 
-        self._values: dict[str, QLabel] = {}
+        self.fields: dict[str, PoseField] = {}
         for row, name in enumerate(labels):
             label = QLabel(name)
             label.setObjectName("poseLabel")
-            value_label = QLabel("0.00")
-            value_label.setObjectName("poseValue")
-            value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            field = PoseField()
+            field.entered.connect(lambda value, name=name: self.entered.emit(name, value))
             layout.addWidget(label, row, 0)
-            layout.addWidget(value_label, row, 1)
-            self._values[name] = value_label
+            layout.addWidget(field, row, 1)
+            self.fields[name] = field
 
     def update_values(self, values: dict[str, float]) -> None:
         for name, value in values.items():
-            label = self._values.get(name)
-            if label is not None:
-                label.setText(f"{value:7.2f}")
+            field = self.fields.get(name)
+            if field is not None:
+                field.show_value(value)
 
 
 class JumpParamsCard(QFrame):
