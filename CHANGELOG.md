@@ -2,6 +2,28 @@
 
 All notable changes to pydobotlab. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.2] - 2026-10-31
+
+### Added
+
+- Control panel: a value of the pose readout can be clicked and a target typed into it. Enter moves the arm with `ptp` (`MOVJ_XYZ` for X, Y, Z, R; `MOVJ_ANGLE` for J1 to J4), changing only that value; Esc cancels. A target out of reach is refused with an alarm, as in a script.
+- Each version published to PyPI also gets a GitHub release, created when its version pull request is merged: tagged on the merge commit, with its changelog section as the notes and the wheel and sdist attached.
+
+### Changed
+
+- Each arm has its own speed, saved in the configuration file by its serial number. An arm without a saved speed uses the default speed, 50 %. The control panel's slider and `motion_params` in a script both save it. When a control panel connects to an arm, and when the arm answers again after a disconnect, the panel sets the arm's saved speed. Before, the panel kept whatever speed the arm had, which an earlier program could have left.
+- A script whose arm stops answering gets an error that says what to check: `the arm on '/dev/ttyACM0' is not responding (read timeout). Check that it is turned on and its USB cable is connected.` Before, it said only `read timeout on '/dev/ttyACM0'`. In discovery, a device that does not answer is described as not a Dobot Magician, as before for a wrong answer.
+- Control panel: a window always connects through the panel's broker. If the broker cannot start because another program uses its TCP port (8765), the hub says so at startup, and no arm can be opened.
+
+### Fixed
+
+- Control panel: the speed slider sent the speed only when its handle was dragged and released. A click on the slider's track, the mouse wheel, or the arrow keys moved the slider without telling the arm, so the slider could show 100 % while the arm moved at 1 %. Every change is now set on the arm at once; a drag is set when the slider is released.
+- Control panel: when the arm stopped answering (switched off, or its cable pulled), the panel showed it as connected for up to 6 seconds, and actions failed with errors such as `read timeout on '/dev/ttyACM0'`. Now the panel checks the arm before every action, every 2 seconds, and when reading the pose fails. If the arm does not answer, the panel shows *Disconnected* at once, sends nothing, and says: "The arm is not responding. Check that it is turned on and its USB cable is connected, then press Reconnect." If the arm answers again, the panel shows *Connected*. After 3 checks in a row without an answer, it closes its connection until *Reconnect*.
+- An arm switched off and on again came back in the hub as a new arm, *Dobot Magician 2*. The broker kept the arm's port open, so Linux gave the arm a new port name (`/dev/ttyACM1` instead of `/dev/ttyACM0`), and the hub numbers arms by port. The broker now closes a port as soon as its serial link fails, so the arm keeps its port name and its number, and *Reconnect* works.
+- A script could get "port is busy" while the control panel worked with the same arm. At startup, the panel checks whether a broker is already running before starting its own, and that "no" answer was reused for 2 seconds. A window opened in those 2 seconds did not find the broker and opened the port itself, so scripts could not reach the arm through the broker. Starting the broker now clears that answer, and a window never opens the port itself.
+- A serial port that fails while a command is sent raises `DobotConnectionError`, also when the error comes from outside pyserial (on Linux, `termios.error` when the USB device is gone).
+- Control panel: the Home button looks disabled when it is, for example while the arm homes or does not answer.
+
 ## [0.2.1.1] - 2026-10-18
 
 ### Added
@@ -166,6 +188,7 @@ All notable changes to pydobotlab. The format follows [Keep a Changelog](https:/
 
 First release: the Python functions of the DobotLab Magician manual over serial, the firmware command queue, alarms, pose streaming, port discovery, the broker, the PySide6 control panel, and the simulator.
 
+[0.2.2]: https://github.com/taleylon/pydobotlab/compare/v0.2.1.1...v0.2.2
 [0.2.1.1]: https://github.com/taleylon/pydobotlab/compare/v0.2.1...v0.2.1.1
 [0.2.1]: https://github.com/taleylon/pydobotlab/compare/v0.2...v0.2.1
 [0.2]: https://github.com/taleylon/pydobotlab/compare/v0.1.0.1...v0.2
