@@ -122,11 +122,13 @@ def main(argv: list[str] | None = None) -> int:
 
     broker = DobotBroker()
     started_here = False
+    broker_error: OSError | None = None
     if not is_broker_reachable():
         try:
             broker.start()
             started_here = True
         except OSError as error:
+            broker_error = error
             print(f"warning: could not start local broker: {error}", file=sys.stderr)
 
     from .shortcut import SHORTCUT
@@ -145,6 +147,15 @@ def main(argv: list[str] | None = None) -> int:
     if arguments.simulator:
         hub.setWindowTitle(hub.windowTitle() + "  (simulator)")
     hub.show()
+    if broker_error is not None:
+        from PySide6.QtWidgets import QMessageBox
+
+        from .panel_config import PANEL_CONFIG
+
+        message = PANEL_CONFIG["hub"]["broker_failed"]
+        QMessageBox.warning(
+            hub, message["title"], message["text"].format(port=broker.port, error=broker_error)
+        )
 
     try:
         return app.exec()
