@@ -235,22 +235,25 @@ class SerialTransport:
                 self._serial.write(frame_bytes)
                 self._serial.flush()
             except serial.SerialTimeoutException as error:
-                raise DobotTimeoutError(f"write timeout on {self.port!r}") from error
-            except serial.SerialException as error:
-                raise DobotConnectionError(f"write failed on {self.port!r}: {error}") from error
+                raise DobotTimeoutError(self.not_responding("write timeout")) from error
+            except Exception as error:
+                raise DobotConnectionError(self.not_responding(f"write failed: {error}")) from error
 
             try:
                 return read_frame(self._read_byte)
             except DobotTimeoutError:
                 raise
             except Exception as error:
-                raise DobotConnectionError(f"read failed on {self.port!r}: {error}") from error
+                raise DobotConnectionError(self.not_responding(f"read failed: {error}")) from error
+
+    def not_responding(self, cause: str) -> str:
+        return get_config()["messages"]["arm_not_responding"].format(port=self.port, error=cause)
 
     def _read_byte(self) -> bytes:
         assert self._serial is not None
         data = self._serial.read(1)
         if not data:
-            raise DobotTimeoutError(f"read timeout on {self.port!r}")
+            raise DobotTimeoutError(self.not_responding("read timeout"))
         return data
 
 
