@@ -133,6 +133,17 @@ def test_pad_paints_in_every_state(application):
         pad.close()
 
 
+def test_harmless_qt_warnings_are_hidden(application):
+    from PySide6.QtCore import QLoggingCategory
+
+    from pydobotlab.panel.app import hide_harmless_qt_warnings
+
+    hide_harmless_qt_warnings()
+    for name in ("qt.qpa.wayland.textinput", "qt.qpa.services"):
+        assert not QLoggingCategory(name).isWarningEnabled()
+    assert QLoggingCategory("qt.qpa.wayland").isWarningEnabled()  # other warnings still show
+
+
 def test_panel_windows_show_the_pydobotlab_icon(application):
     from pydobotlab.panel.app import show_panel_icon
 
