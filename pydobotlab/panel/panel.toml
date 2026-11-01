@@ -40,6 +40,25 @@ title = "Scripts connected"
 one_script = "1 script is connected to an arm through the control panel.\nQuitting disconnects it from the arm.\n\nQuit anyway?"
 several_scripts = "{count} scripts are connected to an arm through the control panel.\nQuitting disconnects them from the arm.\n\nQuit anyway?"
 
+# Shown at startup when the panel cannot start the service that lets scripts
+# share the arms (the broker). {port} is its TCP port and {error} the cause.
+[hub.broker_failed]
+title = "Panel service not started"
+text = "The panel could not start its connection service on port {port}: {error}\nAnother program may be using that port. Close it, then restart the panel. Until then, no arm can be opened."
+
+# Shown when the arm does not answer the control panel.
+[connection]
+not_responding = "The arm is not responding. Check that it is turned on and its USB cable is connected, then press Reconnect."
+
+# A target typed into the pose readout. {name} is X, Y, Z, R, or J1 to J4,
+# {value} the typed value, and {error} the error's first line.
+[pose_entry]
+tooltip = "Click to type a target. Enter moves the arm; Esc cancels."
+moving = "moving to {name} = {value:.2f}..."
+done = "move complete"
+refused = "the arm refused the move - see the alarm"
+failed = "move failed: {error}"
+
 [alarm_text]
 # Joint names in alarm messages, for joints 1 to 4.
 joint_names = ["base (J1)", "rear arm (J2)", "forearm (J3)", "end-effector rotation (J4)"]

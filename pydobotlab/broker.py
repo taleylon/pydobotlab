@@ -108,6 +108,8 @@ class DobotBroker:
 
         self._server = BrokerServer((self.host, self.port), ClientHandler)
         self.port = self._server.server_address[1]
+        with _BROKER_CACHE_LOCK:
+            _BROKER_CACHE.clear()  # a "no broker" answer from before the start is wrong
         self._server_thread = threading.Thread(
             target=self._server.serve_forever,
             name=f"dobot-broker@{self.host}:{self.port}",
@@ -278,6 +280,9 @@ class DobotBroker:
                     )
                     reply = pack(response.cmd_id, response.ctrl, response.params)
                 except Exception as error:
+                    garbled_reply = isinstance(error.__cause__, DobotProtocolError)
+                    if isinstance(error, DobotConnectionError) and not garbled_reply:
+                        self._drop_failed_transport(port_name, transport)
                     if not self._reply_error(connection, error):
                         return
                     continue
@@ -291,6 +296,15 @@ class DobotBroker:
             # the port - otherwise a panel close would leave the broker
             # holding the port forever.
             self._release_client(port_name)
+
+    def _drop_failed_transport(self, port: str, transport: SerialTransport) -> None:
+        """Close a port whose serial link failed, for example when the arm was
+        switched off, so the OS can give the arm the same port name when it
+        comes back. The next client to attach opens the port again."""
+        with self._transports_lock:
+            if self._transports.get(port) is transport:
+                del self._transports[port]
+        transport.close()
 
     @staticmethod
     def _reply_error(connection: socket.socket, error: Exception) -> bool:

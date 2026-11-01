@@ -11,7 +11,9 @@ The configuration is a dictionary of sections, for example
 
 from __future__ import annotations
 
+import json
 import os
+import re
 import shutil
 import threading
 import tomllib
@@ -147,3 +149,61 @@ def set_config(config: Config | None) -> None:
     global _active_config
     with _active_config_lock:
         _active_config = config
+
+
+def saved_arm_speed(serial_number: str) -> float:
+    """The speed saved for the arm with ``serial_number``, or the default speed.
+
+    The file is read again: a script may have saved a speed since it was last read.
+    """
+    try:
+        config = load_config()
+    except DobotConfigError:
+        config = get_config()
+    else:
+        set_config(config)
+    speed = config["motion"]["arms"].get(serial_number)
+    if isinstance(speed, bool) or not isinstance(speed, int | float):
+        return config["motion"]["speed"]
+    return speed
+
+
+def save_arm_speed(serial_number: str, speed: float) -> bool:
+    """Save ``speed`` for the arm with ``serial_number`` in ``[motion.arms]`` of the
+    configuration file and in the active configuration.
+
+    Only that arm's line is written. ``False`` if the arm has no serial number or
+    the file cannot be written.
+    """
+    if not serial_number:
+        return False
+    get_config()["motion"]["arms"][serial_number] = speed
+    override = os.environ.get(CONFIG_ENVIRONMENT_VARIABLE)
+    path = Path(override).expanduser() if override else user_config_path()
+    if not path.exists() and not create_user_config(path):
+        return False
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    except OSError:
+        return False
+    entry = f"{json.dumps(serial_number)} = {speed:g}\n"
+    key = re.compile(rf'\s*"?{re.escape(serial_number)}"?\s*=')
+    headers = [
+        index for index, line in enumerate(lines) if line.split("#")[0].strip() == "[motion.arms]"
+    ]
+    if not headers:
+        lines.append(f"\n[motion.arms]\n{entry}")
+    else:
+        index = headers[0] + 1
+        while index < len(lines) and not lines[index].lstrip().startswith("["):
+            if key.match(lines[index]):
+                lines[index] = entry
+                break
+            index += 1
+        else:
+            lines.insert(headers[0] + 1, entry)
+    try:
+        path.write_text("".join(lines), encoding="utf-8")
+    except OSError:
+        return False
+    return True

@@ -25,7 +25,14 @@ extra_usb_ids = []            # more [vendor_id, product_id] adapters, e.g. [[0x
 pose_hz = 30.0                # pose readout refresh rate
 alarm_hz = 2.0                # alarm banner refresh rate
 watchdog_interval = 2.0       # time between connection checks
-watchdog_failures = 3         # failed checks in a row before showing "Disconnected"
+watchdog_failures = 3         # checks in a row without an answer before the panel closes its connection
+
+[motion]
+speed = 50.0                  # percent: move and jog speed of an arm without its own speed below
+
+# Speed of each arm, by serial number. Saved when the speed is set in the
+# control panel or with motion_params; the panel sets it when it connects.
+[motion.arms]
 
 [simulator]
 arms = 2
@@ -54,3 +61,6 @@ panel_not_running = "the panel is not running. Start it again, then re-run the s
 # A script lost its connection through the control panel. {port} is the arm's
 # port and {error} the cause.
 panel_connection_lost = "lost the connection to {port!r} through the control panel (was the panel closed? Keep it open while the script runs): {error}"
+# The arm did not answer, or its serial link failed. {port} is the arm's port
+# and {error} the cause.
+arm_not_responding = "the arm on {port!r} is not responding ({error}). Check that it is turned on and its USB cable is connected."

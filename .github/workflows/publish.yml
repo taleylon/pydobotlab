@@ -7,6 +7,8 @@ name: Publish package
 # Other pushes to main publish nothing. A manual run can publish to TestPyPI
 # from any ref, or to PyPI from the tag v<version>.
 # The rules are in scripts/check_release_version.py.
+# After a PyPI upload, the GitHub release v<version> is created, with the
+# version's changelog section as its notes and the wheel and sdist attached.
 on:
   push:
     branches: [main]
@@ -34,6 +36,7 @@ jobs:
       pull-requests: read
     outputs:
       publish: ${{ steps.version.outputs.publish }}
+      version: ${{ steps.version.outputs.version }}
       destination: ${{ inputs.destination || 'pypi' }}
     steps:
       - uses: actions/checkout@v6
@@ -76,3 +79,34 @@ jobs:
       - name: Publish to PyPI
         if: needs.check-release.outputs.destination == 'pypi'
         uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    needs: [check-release, publish]
+    if: needs.check-release.outputs.publish == 'true' && needs.check-release.outputs.destination == 'pypi'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v8
+        with:
+          name: distributions
+          path: dist/
+      - name: Create the GitHub release with the changelog section
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.check-release.outputs.version }}
+        run: |
+          if gh release view "v$VERSION" > /dev/null 2>&1; then
+            echo "::notice::the GitHub release v$VERSION already exists"
+            exit 0
+          fi
+          python scripts/changelog_section.py "$VERSION" release-notes.md
+          gh release create "v$VERSION" dist/* --target "$GITHUB_SHA" \
+            --title "pydobotlab $VERSION" --notes-file release-notes.md

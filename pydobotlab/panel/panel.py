@@ -2,8 +2,8 @@
 
 The :class:`ControlPanel` manages one :class:`Dobot` and creates the
 DobotLab "Arm Control Panel" interface. It provides jog pads, end-effector
-tabs, a speed slider, Home and Clear Alarm buttons, a live pose display, and
-an alarm banner. A background pose-stream thread sends updates to the Qt
+tabs, a speed slider, Home and Clear Alarm buttons, a live pose display that
+takes typed targets, and an alarm banner. A background pose-stream thread sends updates to the Qt
 main thread through :class:`Signal`, ensuring safe label updates.
 """
 
@@ -27,17 +27,47 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from pydobotlab import CommandID, Dobot, DobotAlarmError, DobotConnectionError, DobotTimeoutError
-from pydobotlab.config import get_config
+from pydobotlab import (
+    CommandID,
+    Dobot,
+    DobotAlarmError,
+    DobotConnectionError,
+    DobotTimeoutError,
+    Pose,
+    PTPMode,
+)
+from pydobotlab.config import get_config, save_arm_speed, saved_arm_speed
 from pydobotlab.protocol import JOGCmd, JogMode, pack_floats, pack_u8
 
 from .alarm_text import alarm_lines
+from .panel_config import PANEL_CONFIG
 from .widgets import CoordReadout, JogPad, JumpParamsCard, version_label
+
+POSE_ENTRY_TEXT = PANEL_CONFIG["pose_entry"]
+CONNECTION_TEXT = PANEL_CONFIG["connection"]
 
 
 def slider_percent(speed_ratio: float) -> int:
     """A velocity ratio as a position of the speed slider (1 to 100)."""
     return max(1, min(100, int(round(speed_ratio))))
+
+
+def ptp_target(pose: Pose, name: str, value: float) -> tuple[PTPMode, tuple[float, ...]]:
+    """The PTP mode and target that set one coordinate of ``pose`` to ``value``.
+
+    ``name`` is X, Y, Z, R (a ``MOVJ_XYZ`` move) or J1 to J4 (a ``MOVJ_ANGLE``
+    move); the other three coordinates keep their values.
+    """
+    if name.startswith("J"):
+        mode = PTPMode.MOVJ_ANGLE
+        target = {"J1": pose.j1, "J2": pose.j2, "J3": pose.j3, "J4": pose.j4}
+    else:
+        mode = PTPMode.MOVJ_XYZ
+        target = {"X": pose.x, "Y": pose.y, "Z": pose.z, "R": pose.r}
+    if name not in target:
+        raise ValueError(f"unknown coordinate {name!r}")
+    target[name] = value
+    return mode, tuple(target.values())
 
 
 # ---------------------------------------------------------------------------
@@ -129,6 +159,31 @@ class HomeWorker(QThread):
         self.done.emit(True, "")
 
 
+class MoveWorker(QThread):
+    """Sets one coordinate of the arm's pose with ``ptp``, off the GUI thread,
+    as a script would: the move is queued, waited for, and refused on an alarm."""
+
+    done = Signal(bool, bool, str)  # (ok, refused by an alarm, error message)
+
+    def __init__(self, bot: Dobot, name: str, value: float, parent=None) -> None:
+        super().__init__(parent)
+        self._bot = bot
+        self._name = name
+        self._value = value
+
+    def run(self) -> None:
+        try:
+            mode, target = ptp_target(self._bot.get_pose(), self._name, self._value)
+            self._bot.ptp(mode, *target)
+        except DobotAlarmError as error:
+            self.done.emit(False, True, str(error))
+            return
+        except Exception as error:
+            self.done.emit(False, False, str(error))
+            return
+        self.done.emit(True, False, "")
+
+
 # ---------------------------------------------------------------------------
 # ControlPanel main window
 # ---------------------------------------------------------------------------
@@ -149,16 +204,19 @@ class ControlPanel(QMainWindow):
         self._label = f"{name}  -  {port}" if developer else name
         self.setWindowTitle(self._label)
         self.resize(880, 760)
-        # require_panel=False: this window is part of the panel. Without
-        # auto_start_queue, opening or closing the window does not clear the
-        # arm's queue, so a script's queued moves are not cleared out.
-        self._bot = Dobot(port, require_panel=False, auto_start_queue=False)
+        # require_panel=True: always through the panel's broker, so scripts can
+        # share the arm. Without auto_start_queue, opening or closing the window
+        # does not clear the arm's queue, so a script's queued moves are kept.
+        self._bot = Dobot(port, require_panel=True, auto_start_queue=False)
         self._streamer: PoseStreamer | None = None
         self._home_worker: HomeWorker | None = None
+        self._move_worker: MoveWorker | None = None
         self._connected: bool = False
         self._alarm_active: bool = False
         self._watchdog: QTimer | None = None
-        self._failed_checks: int = 0  # consecutive failed watchdog checks
+        self._failed_checks: int = 0  # checks in a row the arm did not answer
+        self._serial_number: str = ""  # key of the arm's saved speed
+        self._jogging: bool = False  # a jog was sent and not yet stopped
 
         self.build_ui()
         self.connect_signals()
@@ -173,6 +231,8 @@ class ControlPanel(QMainWindow):
 
     def build_ui(self) -> None:
         central = QWidget()
+        # A click on the window outside the pose values cancels a target being typed.
+        central.setFocusPolicy(Qt.ClickFocus)
         self.setCentralWidget(central)
         root = QVBoxLayout(central)
         root.setContentsMargins(12, 12, 12, 12)
@@ -335,7 +395,7 @@ class ControlPanel(QMainWindow):
         self._clear_alarm_button.clicked.connect(self.clear_alarms)
         self._reconnect_button.clicked.connect(self.reconnect)
         self._jump_card.valuesChanged.connect(self.apply_jump_params)
-        self._speed_slider.valueChanged.connect(self.update_speed_label)
+        self._speed_slider.valueChanged.connect(self.slider_moved)
         self._speed_slider.sliderReleased.connect(self.apply_speed)
 
         for pad in (self._xy_pad, self._zr_pad):
@@ -344,6 +404,8 @@ class ControlPanel(QMainWindow):
         for pad in (self._j12_pad, self._j34_pad):
             pad.jog.connect(lambda c: self.start_jog(c, JogMode.JOINT))
             pad.stop.connect(self.stop_jog)
+        for readout in (self._cartesian_readout, self._joint_readout):
+            readout.entered.connect(self.start_move)
 
     # ---- Connection lifecycle ----------------------------------------------
 
@@ -356,16 +418,12 @@ class ControlPanel(QMainWindow):
         try:
             self._bot.connect()
             self._bot.start_queue()
-        except DobotConnectionError as error:
+        except (DobotConnectionError, DobotTimeoutError) as error:
             QMessageBox.critical(
                 self, "Connection failed", f"Could not open {self._label}:\n{error}"
             )
             self.close()
             return
-
-        self.statusBar().showMessage(f"Connected to {self._label}")
-
-        self.adopt_arm_speed()
 
         # Pull the current Jump params so the card matches the firmware.
         try:
@@ -384,8 +442,6 @@ class ControlPanel(QMainWindow):
         self._watchdog.start()
         self.set_connection_state(True)
 
-        self.start_streaming()
-
     def start_streaming(self) -> None:
         """Start the pose stream that drives the readout and the alarm banner."""
         settings = get_config()["panel"]
@@ -395,7 +451,7 @@ class ControlPanel(QMainWindow):
         self._streamer.poseReady.connect(self.update_pose)
         self._streamer.alarmsChanged.connect(self.update_alarms)
         self._streamer.speedChanged.connect(self.sync_speed)
-        self._streamer.error.connect(lambda message: self.statusBar().showMessage(message, 3000))
+        self._streamer.error.connect(self.report_stream_error)
         self._bot.start_pose_stream(
             callback=self._streamer.push,
             hz=settings["pose_hz"],
@@ -408,6 +464,9 @@ class ControlPanel(QMainWindow):
                 self._home_worker.requestInterruption()
                 self._home_worker.wait(2000)
             self._bot.disconnect()
+            if self._move_worker is not None:
+                # Ends at its next read of the arm, now that the connection is closed.
+                self._move_worker.wait(2000)
         finally:
             self.closed.emit(self._port)
             event.accept()
@@ -416,6 +475,9 @@ class ControlPanel(QMainWindow):
 
     @Slot(int)
     def start_jog(self, cmd: int, mode: JogMode) -> None:
+        if not self.arm_responds():
+            return
+        self._jogging = True
         try:
             self._bot.jog(cmd, mode)
         except Exception as error:
@@ -423,6 +485,9 @@ class ControlPanel(QMainWindow):
 
     @Slot()
     def stop_jog(self) -> None:
+        if not self._jogging:
+            return
+        self._jogging = False
         try:
             self._bot.jog_stop()
         except Exception as error:
@@ -431,16 +496,25 @@ class ControlPanel(QMainWindow):
             )
 
     @Slot(int)
-    def update_speed_label(self, value: int) -> None:
+    def slider_moved(self, value: int) -> None:
+        """Show the slider's value. A click, the wheel, or a key sets it at once;
+        a drag sets it when the slider is released."""
         self._speed_value.setText(f"{value} %")
+        if not self._speed_slider.isSliderDown():
+            self.apply_speed()
 
     @Slot()
     def apply_speed(self) -> None:
-        """Push the slider value to BOTH PTP and JOG so jog buttons honour
-        the speed setting just like move_to() does. Sent immediately, so it
-        applies to a running script's next move without waiting for it."""
-        speed_percent = float(self._speed_slider.value())
-        ratios = pack_floats(speed_percent, speed_percent)
+        """Save the slider's speed for this arm and set it on the arm."""
+        speed_percent = self._speed_slider.value()
+        save_arm_speed(self._serial_number, speed_percent)
+        if self.arm_responds():
+            self.send_speed(speed_percent)
+
+    def send_speed(self, speed_percent: float) -> None:
+        """Set the speed of moves and jogs. Sent immediately, so it applies to a
+        running script's next move without waiting for it."""
+        ratios = pack_floats(float(speed_percent), float(speed_percent))
         try:
             self._bot.write_command(CommandID.GET_SET_PTP_COMMON_PARAMS, ratios)
             self._bot.write_command(CommandID.GET_SET_JOG_COMMON_PARAMS, ratios)
@@ -451,6 +525,8 @@ class ControlPanel(QMainWindow):
     def start_homing(self) -> None:
         """Home the arm, also from an alarm. The controls stay disabled until homing ends."""
         if self._home_worker is not None and self._home_worker.isRunning():
+            return
+        if not self.arm_responds():
             return
         self.set_controls_enabled(False)
         self.statusBar().showMessage("homing...")
@@ -465,6 +541,8 @@ class ControlPanel(QMainWindow):
         self._home_worker = None
         self.set_controls_enabled(self._connected)
         if not ok:
+            if not self.arm_responds():
+                return
             self.statusBar().showMessage("home failed", 3000)
             QMessageBox.warning(
                 self, "Home failed", error if self._developer else error.splitlines()[0]
@@ -479,6 +557,41 @@ class ControlPanel(QMainWindow):
         else:
             self.statusBar().showMessage("home complete", 3000)
 
+    @Slot(str, float)
+    def start_move(self, name: str, value: float) -> None:
+        """Move the arm so that coordinate ``name`` becomes ``value``, as ``ptp`` does.
+
+        The pose values cannot be edited until the move ends. A target out of
+        reach is refused by the arm, and its alarm is shown in the banner.
+        """
+        if self._move_worker is not None:
+            return
+        if not self.arm_responds():
+            return
+        self._move_worker = MoveWorker(self._bot, name, value, self)
+        self._move_worker.done.connect(self.finish_move)
+        self.set_pose_entry_enabled(False)
+        self.statusBar().showMessage(POSE_ENTRY_TEXT["moving"].format(name=name, value=value))
+        self._move_worker.start()
+
+    @Slot(bool, bool, str)
+    def finish_move(self, ok: bool, refused: bool, error: str) -> None:
+        """Report the end of a typed move. An alarm is shown in the banner, not in a pop-up."""
+        self._move_worker = None
+        self.set_pose_entry_enabled(self._connected and self._home_worker is None)
+        if ok:
+            self.statusBar().showMessage(POSE_ENTRY_TEXT["done"], 3000)
+        elif refused:
+            self.statusBar().showMessage(POSE_ENTRY_TEXT["refused"], 5000)
+        elif self.arm_responds():
+            first_line = error.splitlines()[0] if error else ""
+            self.statusBar().showMessage(POSE_ENTRY_TEXT["failed"].format(error=first_line), 5000)
+
+    def set_pose_entry_enabled(self, enabled: bool) -> None:
+        """Allow or block typing targets into the pose values; they keep showing the pose."""
+        for readout in (self._cartesian_readout, self._joint_readout):
+            readout.setEnabled(enabled)
+
     @Slot()
     def clear_alarms(self) -> None:
         """Clear the alarms; if one comes back at once, keep it and say why.
@@ -488,6 +601,8 @@ class ControlPanel(QMainWindow):
         faulting sensor, ...), so the student never sees a misleading
         "alarms cleared" message.
         """
+        if not self.arm_responds():
+            return
         try:
             self._bot.clear_alarm()
         except DobotAlarmError as error:
@@ -542,42 +657,49 @@ class ControlPanel(QMainWindow):
 
     @Slot()
     def check_connection(self) -> None:
-        """Probe TRANSPORT HEALTH - does the wire still answer?
+        """Watchdog: check that the arm still answers."""
+        self.arm_responds()
 
-        We use ``get_device_version()`` rather than something arm-state-y like
-        ``get_alarms()`` because:
-
-        * it is a pure read with no side-effects on motion or alarms;
-        * it cannot raise as a consequence of any logical state on the arm
-          (an active workspace / IK alarm does not affect the read);
-        * the ONLY way it can fail is if the serial transport itself died.
-
-        Likewise we catch only the two transport exceptions. Any other
-        exception (bug, programming error, ...) is allowed to propagate so
-        we don't mistakenly interpret a logic problem as a cable pull.
-        """
-        if not self._connected:
-            return
+    def arm_responds(self) -> bool:
+        """Whether the arm answers ``get_device_version()``, a read that no arm
+        state affects. If it does not, the arm is shown as disconnected with what
+        to check; after ``watchdog_failures`` checks in a row, the connection is
+        closed until Reconnect."""
+        if not self._bot.is_open:
+            return False
         try:
             self._bot.get_device_version()
-        except (DobotConnectionError, DobotTimeoutError):
+        except (DobotConnectionError, DobotTimeoutError) as error:
             self._failed_checks += 1
+            self.set_connection_state(False)
+            message = CONNECTION_TEXT["not_responding"]
+            self.statusBar().showMessage(f"{message} ({error})" if self._developer else message)
             if self._failed_checks >= get_config()["panel"]["watchdog_failures"]:
-                self.set_connection_state(False)
-            else:
-                self.statusBar().showMessage("connecting...", 4000)
-        else:
-            self._failed_checks = 0
+                self._bot.disconnect()
+            return False
+        self._failed_checks = 0
+        self.set_connection_state(True)
+        return True
+
+    @Slot(str)
+    def report_stream_error(self, message: str) -> None:
+        """Show a failed pose-stream read, unless the arm does not answer at all."""
+        if self.arm_responds():
+            self.statusBar().showMessage(message, 3000)
 
     def set_connection_state(self, connected: bool) -> None:
+        """Show whether the arm answers. When it answers again, its saved speed
+        is set and the pose stream restarts."""
         if connected == self._connected:
             return
         self._connected = connected
-        self._failed_checks = 0
         if connected:
             self._status_label.setText("● Connected")
             self._status_label.setStyleSheet("color:#7ce070; font-weight:600;")
             self._reconnect_button.setVisible(False)
+            self.statusBar().showMessage(f"Connected to {self._label}", 3000)
+            self.apply_saved_speed()
+            self.start_streaming()
         else:
             self._status_label.setText("● Disconnected")
             self._status_label.setStyleSheet("color:#ff6b6b; font-weight:600;")
@@ -604,10 +726,11 @@ class ControlPanel(QMainWindow):
             self._effector,
         ):
             widget.setEnabled(enabled)
+        self.set_pose_entry_enabled(enabled and self._move_worker is None)
 
     @Slot()
     def reconnect(self) -> None:
-        """Try to re-open the serial connection to the same port."""
+        """Try to re-open the connection to the same port."""
         self._reconnect_button.setEnabled(False)
         self.statusBar().showMessage(f"Reconnecting to {self._label}...")
         try:
@@ -617,21 +740,25 @@ class ControlPanel(QMainWindow):
                 pass
             self._bot.connect()
             self._bot.start_queue()
+        except (DobotConnectionError, DobotTimeoutError) as error:
+            message = CONNECTION_TEXT["not_responding"]
+            self.statusBar().showMessage(f"{message} ({error})" if self._developer else message)
+            self._reconnect_button.setEnabled(True)
+            return
         except Exception as error:
             self.statusBar().showMessage(f"Reconnect failed: {error}", 5000)
             self._reconnect_button.setEnabled(True)
             return
-        # Restart the pose stream + watchdog
-        self.start_streaming()
-        self.adopt_arm_speed()
+        self._failed_checks = 0
         self.set_connection_state(True)
         self._reconnect_button.setEnabled(True)
-        self.statusBar().showMessage(f"Reconnected to {self._label}", 3000)
 
     # ---- Jump-params card --------------------------------------------------
 
     @Slot(float, float)
     def apply_jump_params(self, zlimit: float, height: float) -> None:
+        if not self.arm_responds():
+            return
         try:
             # Wire order is (jumpHeight, zLimit).
             self._bot.write_command(
@@ -658,16 +785,16 @@ class ControlPanel(QMainWindow):
         except Exception as error:
             self.statusBar().showMessage(f"speed: {error}", 3000)
 
-    def adopt_arm_speed(self) -> None:
-        """Take over the speed the arm already has, so opening the panel does not
-        change the speed of a running script. Jogging uses the same speed."""
+    def apply_saved_speed(self) -> None:
+        """Set the arm to its saved speed, from the panel's slider or a script's
+        ``motion_params``, and show it on the slider."""
         try:
-            speed_percent = slider_percent(self._bot.get_arm_speed_ratio(1))  # 1 = PTP
-        except Exception as error:
-            self.statusBar().showMessage(f"speed: {error}", 3000)
+            self._serial_number = self._bot.get_device_serial_number()
+        except (DobotConnectionError, DobotTimeoutError):
             return
+        speed_percent = slider_percent(saved_arm_speed(self._serial_number))
         self.show_speed(speed_percent)
-        self.apply_jog_speed(speed_percent)
+        self.send_speed(speed_percent)
 
     @Slot(float)
     def sync_speed(self, vel: float) -> None:
@@ -684,6 +811,8 @@ class ControlPanel(QMainWindow):
     # is running, and the GUI thread never waits for the arm's queue.
 
     def set_end_effector(self, command_id: CommandID, enable: bool, on: bool, label: str) -> None:
+        if not self.arm_responds():
+            return
         try:
             self._bot.write_command(command_id, pack_u8(int(enable), int(on)))
         except Exception as error:

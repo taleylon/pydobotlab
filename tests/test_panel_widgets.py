@@ -133,6 +133,17 @@ def test_pad_paints_in_every_state(application):
         pad.close()
 
 
+def test_harmless_qt_warnings_are_hidden(application):
+    from PySide6.QtCore import QLoggingCategory
+
+    from pydobotlab.panel.app import hide_harmless_qt_warnings
+
+    hide_harmless_qt_warnings()
+    for name in ("qt.qpa.wayland.textinput", "qt.qpa.services"):
+        assert not QLoggingCategory(name).isWarningEnabled()
+    assert QLoggingCategory("qt.qpa.wayland").isWarningEnabled()  # other warnings still show
+
+
 def test_panel_windows_show_the_pydobotlab_icon(application):
     from pydobotlab.panel.app import show_panel_icon
 
@@ -196,13 +207,15 @@ def test_panel_connects_and_updates_simulated_arm(application, monkeypatch):
         simulator.stop_all()
 
 
-def test_panel_adopts_the_arm_speed_and_follows_script_changes(application, monkeypatch):
+def test_panel_sets_the_saved_speed_and_follows_script_changes(application, monkeypatch):
     import serial
     import serial.tools.list_ports
 
     import pydobotlab.panel.panel as panel_module
     import pydobotlab.simulator as simulator
-    from pydobotlab import Dobot
+    from pydobotlab import CommandID, Dobot
+    from pydobotlab.config import saved_arm_speed
+    from pydobotlab.protocol import pack_floats
 
     monkeypatch.setattr(serial, "Serial", serial.Serial)
     monkeypatch.setattr(serial.tools.list_ports, "comports", serial.tools.list_ports.comports)
@@ -212,22 +225,47 @@ def test_panel_adopts_the_arm_speed_and_follows_script_changes(application, monk
         panel_module, "Dobot", lambda port, **options: Dobot(port, **options, via_broker=False)
     )
     with Dobot("/dev/sim0", via_broker=False, verbose=False) as script:
-        script.motion_params = (30, 30)
+        script.motion_params = (30, 30)  # saved for this arm
+        # Changed without saving, as another program would.
+        script.write_command(CommandID.GET_SET_PTP_COMMON_PARAMS, pack_floats(80, 80))
     panel = None
     try:
         panel = panel_module.ControlPanel("/dev/sim0")
         assert panel._speed_slider.value() == 30
-        assert panel._bot.get_arm_speed_ratio(1) == 30  # opening the panel kept the speed
+        assert panel._bot.get_arm_speed_ratio(1) == 30  # opening the panel set the saved speed
         assert panel._bot.get_arm_speed_ratio(0) == 30  # and jogging uses it
 
         panel._bot.motion_params = (70, 70)  # a script changes the speed
         panel.sync_speed(panel._bot.get_arm_speed_ratio(1))  # what the 1 Hz poll does
         assert panel._speed_slider.value() == 70
         assert panel._bot.get_arm_speed_ratio(0) == 70
+        assert saved_arm_speed(panel._serial_number) == 70
     finally:
         if panel is not None:
             panel.close()
         simulator.stop_all()
+
+
+def test_every_slider_change_is_saved_and_set_on_the_arm(application, simulated_arm):
+    from pydobotlab.config import saved_arm_speed
+    from pydobotlab.panel.panel import ControlPanel
+
+    panel = ControlPanel("/dev/sim0")
+    slider = panel._speed_slider
+    try:
+        slider.setValue(80)  # as a click on the track, the mouse wheel, or a key does
+        assert panel._bot.get_arm_speed_ratio(1) == 80
+        assert panel._bot.get_arm_speed_ratio(0) == 80
+        assert saved_arm_speed(panel._serial_number) == 80
+
+        slider.setSliderDown(True)  # a drag is set when the slider is released
+        slider.setValue(20)
+        assert panel._bot.get_arm_speed_ratio(1) == 80
+        slider.setSliderDown(False)
+        assert panel._bot.get_arm_speed_ratio(1) == 20
+        assert saved_arm_speed(panel._serial_number) == 20
+    finally:
+        panel.close()
 
 
 NO_MAGICIAN_NOTE = (
@@ -504,48 +542,108 @@ def test_hub_runs_one_scan_at_a_time(application, monkeypatch):
         hub.close()
 
 
-def test_watchdog_disconnects_only_after_consecutive_failures(application, monkeypatch):
+NOT_RESPONDING = (
+    "The arm is not responding. Check that it is turned on and its USB cable is connected, "
+    "then press Reconnect."
+)
+
+
+def no_answer():
+    from pydobotlab import DobotTimeoutError
+
+    raise DobotTimeoutError("read timeout")
+
+
+def test_an_arm_that_does_not_answer_shows_as_disconnected_at_once(
+    application, simulated_arm, monkeypatch
+):
+    from pydobotlab.panel.panel import ControlPanel
+
+    panel = ControlPanel("/dev/sim0")
+    try:
+        answers = panel._bot.get_device_version
+        monkeypatch.setattr(panel._bot, "get_device_version", no_answer)
+        panel.check_connection()
+        assert not panel._connected
+        assert panel._status_label.text() == "● Disconnected"
+        assert panel._reconnect_button.isVisibleTo(panel)
+        assert not panel._home_button.isEnabled()
+        assert panel.statusBar().currentMessage() == NOT_RESPONDING
+
+        monkeypatch.setattr(panel._bot, "get_device_version", answers)
+        panel.check_connection()
+        assert panel._connected  # it answers again
+        assert panel._home_button.isEnabled()
+
+        monkeypatch.setattr(panel._bot, "get_device_version", no_answer)
+        for _ in range(3):
+            panel.check_connection()
+        assert not panel._bot.is_open  # closed after 3 checks in a row without an answer
+
+        monkeypatch.setattr(panel._bot, "get_device_version", answers)
+        panel.check_connection()
+        assert not panel._connected  # only Reconnect opens it again
+        panel.reconnect()
+        assert panel._connected and panel._bot.is_open
+    finally:
+        panel.close()
+
+
+def test_an_action_is_not_sent_to_an_arm_that_does_not_answer(
+    application, simulated_arm, monkeypatch
+):
+    from pydobotlab import JogMode
+    from pydobotlab.panel.panel import ControlPanel
+
+    panel = ControlPanel("/dev/sim0")
+    try:
+        sent = []
+        monkeypatch.setattr(panel._bot, "jog", lambda *arguments: sent.append(arguments))
+        monkeypatch.setattr(panel._bot, "jog_stop", lambda: sent.append("stop"))
+        monkeypatch.setattr(panel._bot, "get_device_version", no_answer)
+        panel.start_jog(1, JogMode.COORDINATE)
+        panel.stop_jog()  # the pad's release: no jog was sent, so no stop either
+        assert sent == []
+        assert not panel._connected
+        assert panel.statusBar().currentMessage() == NOT_RESPONDING
+
+        panel.report_stream_error("pose stream: read timeout on '/dev/sim0'")
+        assert panel.statusBar().currentMessage() == NOT_RESPONDING  # not the raw error
+    finally:
+        panel.close()
+
+
+def test_a_panel_window_never_opens_the_port_itself(application, monkeypatch):
+    """Without the panel's broker, a window fails to open instead of taking the
+    port, which would make every script find the port busy."""
+    import socket
+
     import serial
     import serial.tools.list_ports
 
     import pydobotlab.panel.panel as panel_module
     import pydobotlab.simulator as simulator
-    from pydobotlab import Dobot, DobotTimeoutError
+    from pydobotlab.config import default_config, set_config
+    from pydobotlab.transport import is_port_claimed
 
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        config = default_config()
+        config["broker"]["port"] = probe.getsockname()[1]  # no broker there
+    set_config(config)
     monkeypatch.setattr(serial, "Serial", serial.Serial)
     monkeypatch.setattr(serial.tools.list_ports, "comports", serial.tools.list_ports.comports)
     monkeypatch.setattr(simulator, "_INSTALLED", False)
     simulator.install_simulator(arms=1)
-    monkeypatch.setattr(
-        panel_module, "Dobot", lambda port, **options: Dobot(port, **options, via_broker=False)
-    )
-    panel = None
+    failures = []
+    monkeypatch.setattr(panel_module.QMessageBox, "critical", lambda *args: failures.append(args))
     try:
         panel = panel_module.ControlPanel("/dev/sim0")
-        assert panel._connected
-        healthy_check = panel._bot.get_device_version
-
-        def lost_reply():
-            raise DobotTimeoutError("no answer")
-
-        monkeypatch.setattr(panel._bot, "get_device_version", lost_reply)
-        panel.check_connection()
-        panel.check_connection()
-        assert panel._connected  # two lost replies in a row are tolerated
-
-        monkeypatch.setattr(panel._bot, "get_device_version", healthy_check)
-        panel.check_connection()  # recovery resets the count
-        monkeypatch.setattr(panel._bot, "get_device_version", lost_reply)
-        panel.check_connection()
-        panel.check_connection()
-        assert panel._connected  # still only 2 since the last success
-
-        panel.check_connection()  # third in a row
-        assert not panel._connected
-        assert panel._reconnect_button.isVisibleTo(panel)
+        assert len(failures) == 1
+        assert not panel._bot.is_open
+        assert not is_port_claimed("/dev/sim0")
+        panel.close()
     finally:
-        if panel is not None:
-            panel.close()
         simulator.stop_all()
 
 
@@ -634,6 +732,7 @@ def test_home_homes_during_an_alarm_with_the_controls_disabled(
         panel.start_homing()
         assert not panel._home_button.isEnabled()
         assert not any(pad.isEnabled() for pad in jog_pads(panel))
+        assert not panel._cartesian_readout.isEnabled()  # no typed targets while homing
         wait_for_homing(application, panel)
 
         assert warnings == []
@@ -661,6 +760,134 @@ def test_home_never_shows_an_alarm_pop_up(application, simulated_arm, monkeypatc
         assert warnings == []
         assert panel.statusBar().currentMessage() == "home complete - an alarm is still active"
         assert panel._home_button.isEnabled()
+    finally:
+        panel.close()
+
+
+# -- typing a target into the pose readout ----------------------------------------------
+
+
+def test_ptp_target_changes_one_coordinate():
+    from pydobotlab import Pose, PTPMode
+    from pydobotlab.panel.panel import ptp_target
+
+    pose = Pose(200, 10, 50, 5, 3, 20, 30, 2)
+    assert ptp_target(pose, "Z", 80) == (PTPMode.MOVJ_XYZ, (200, 10, 80, 5))
+    assert ptp_target(pose, "J2", 40) == (PTPMode.MOVJ_ANGLE, (3, 40, 30, 2))
+    with pytest.raises(ValueError, match="unknown coordinate"):
+        ptp_target(pose, "L", 1)
+
+
+def test_a_value_being_typed_stops_following_the_arm(application):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    from pydobotlab.panel.widgets import CoordReadout
+
+    readout = CoordReadout(["X", "Y", "Z", "R"])
+    readout.show()
+    entered = []
+    readout.entered.connect(lambda name, value: entered.append((name, value)))
+    readout.update_values({"Z": 50})
+    field = readout.fields["Z"]
+    try:
+        QTest.mouseClick(field, Qt.LeftButton)
+        field.setText("80.5")
+        readout.update_values({"Z": 51})
+        assert field.text() == "80.5"  # the typed target stays
+        QTest.keyClick(field, Qt.Key_Return)
+        assert entered == [("Z", 80.5)]
+        assert field.text() == "51.00"  # the arm's value again
+
+        QTest.mouseClick(field, Qt.LeftButton)
+        field.setText("-")
+        QTest.keyClick(field, Qt.Key_Return)  # not a number: nothing is sent
+        QTest.keyClick(field, Qt.Key_Escape)
+        assert field.text() == "51.00" and not field.editing
+        assert entered == [("Z", 80.5)]
+    finally:
+        readout.close()
+
+
+def wait_for_move(application, panel):
+    import time
+
+    deadline = time.monotonic() + 15
+    while panel._move_worker is not None and time.monotonic() < deadline:
+        application.processEvents()
+        time.sleep(0.02)
+    assert panel._move_worker is None, "the move did not finish"
+
+
+def rounded_position(bot):
+    pose = bot.get_pose()
+    return round(pose.x), round(pose.y), round(pose.z)
+
+
+def test_a_typed_value_moves_the_arm_and_keeps_the_other_coordinates(application, simulated_arm):
+    from pydobotlab.panel.panel import ControlPanel
+
+    panel = ControlPanel("/dev/sim0")
+    try:
+        panel._bot.move_to(200, 0, 50)
+        panel._cartesian_readout.entered.emit("Z", 80.0)
+        # One move at a time: no typed targets until this one ends.
+        assert not panel._cartesian_readout.isEnabled()
+        assert not panel._joint_readout.isEnabled()
+        wait_for_move(application, panel)
+
+        assert rounded_position(panel._bot) == (200, 0, 80)
+        assert panel.statusBar().currentMessage() == "move complete"
+        assert panel._cartesian_readout.isEnabled() and panel._joint_readout.isEnabled()
+    finally:
+        panel.close()
+
+
+def test_a_typed_joint_angle_moves_with_movj_angle(application, simulated_arm, monkeypatch):
+    from pydobotlab import PTPMode
+    from pydobotlab.panel.panel import ControlPanel
+
+    panel = ControlPanel("/dev/sim0")
+    try:
+        moves = []
+        monkeypatch.setattr(
+            panel._bot, "ptp", lambda mode, *target: moves.append((mode, target)) or True
+        )
+        pose = panel._bot.get_pose()
+        panel._joint_readout.entered.emit("J2", 40.0)
+        wait_for_move(application, panel)
+        assert moves == [(PTPMode.MOVJ_ANGLE, (pose.j1, 40.0, pose.j3, pose.j4))]
+    finally:
+        panel.close()
+
+
+def test_a_typed_target_out_of_reach_shows_the_alarm_without_a_pop_up(
+    application, simulated_arm, monkeypatch
+):
+    import time
+
+    import pydobotlab.panel.panel as panel_module
+
+    warnings = []
+    monkeypatch.setattr(panel_module.QMessageBox, "warning", lambda *args: warnings.append(args))
+    panel = panel_module.ControlPanel("/dev/sim0")
+    try:
+        panel._bot.move_to(200, 0, 50)
+        panel._cartesian_readout.entered.emit("X", 400.0)
+        wait_for_move(application, panel)
+
+        assert rounded_position(panel._bot) == (200, 0, 50)  # the arm did not move
+        assert [int(alarm) for alarm in panel._bot.get_alarms()] == [OUT_OF_WORKSPACE]
+        assert panel.statusBar().currentMessage() == "the arm refused the move - see the alarm"
+        assert warnings == []
+        deadline = time.monotonic() + 5
+        while not panel._alarm_banner.isVisibleTo(panel) and time.monotonic() < deadline:
+            application.processEvents()
+            time.sleep(0.02)
+        assert panel._alarm_banner.text() == (
+            "Alarm: The target is out of reach. Press Clear Alarm and choose a reachable target."
+        )
+        assert panel._cartesian_readout.isEnabled()  # a new target can be typed
     finally:
         panel.close()
 

@@ -25,6 +25,8 @@ Velocity and acceleration ratios for point-to-point moves, in percent.
 
 Reading returns `(velocity, acceleration)`. Assigning a pair sets the new values and waits until the arm applies them; inside [`batch`](queue.md#batch), the values are queued. Assigning raises a [`DobotAlarmError`](errors.md#dobotalarmerror) subclass if the arm reports an alarm.
 
+Assigning also saves the velocity as this arm's speed in the [configuration file](config.md), by the arm's serial number. The [control panel](../panel/overview.md) shows it on its speed slider and sets it on the arm whenever it connects.
+
 **Example**
 
 ```python

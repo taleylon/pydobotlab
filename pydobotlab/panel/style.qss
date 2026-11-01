@@ -38,7 +38,7 @@ QLabel#header {
     padding: 4px 0;
 }
 
-QLabel#poseValue {
+QLineEdit#poseValue {
     font-family: "Consolas", "Menlo", monospace;
     font-size: 12pt;
     color: #6cc6ff;
@@ -46,7 +46,18 @@ QLabel#poseValue {
     padding: 4px 10px;
     border-radius: 4px;
     border: 1px solid #2a2f3a;
-    min-width: 60px;
+    min-width: 72px;
+    max-width: 72px;
+}
+
+QLineEdit#poseValue:hover {
+    border-color: #3a4150;
+}
+
+QLineEdit#poseValue:focus {
+    color: #ffffff;
+    background: #10233a;
+    border-color: #4a90e2;
 }
 
 QLabel#poseLabel {
@@ -101,6 +112,12 @@ QPushButton#primary:hover {
 
 QPushButton#primary:pressed {
     background: #1a5dc4;
+}
+
+QPushButton#primary:disabled {
+    background: #20242c;
+    color: #555a66;
+    border-color: #20242c;
 }
 
 QPushButton#danger {

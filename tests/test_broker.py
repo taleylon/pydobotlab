@@ -92,6 +92,23 @@ def test_is_broker_reachable_after_start(broker):
     assert is_broker_reachable("127.0.0.1", broker.port, timeout=0.5)
 
 
+def test_starting_a_broker_forgets_an_earlier_no_broker_answer(patched_serial):
+    """The panel checks for a broker before starting its own; that "no" must not
+    be reused by its windows, or they would open the port themselves."""
+    import socket
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        free_port = probe.getsockname()[1]
+    assert not is_broker_reachable("127.0.0.1", free_port)
+    server = DobotBroker(port=free_port)
+    server.start()
+    try:
+        assert is_broker_reachable("127.0.0.1", free_port)
+    finally:
+        server.stop()
+
+
 def test_list_broker_ports_returns_attached(broker):
     ports = list_broker_ports("127.0.0.1", broker.port)
     assert "/dev/fake-broker-A" in ports
@@ -271,6 +288,56 @@ def test_serial_failure_is_reported_with_its_message(broker):
         with pytest.raises(DobotConnectionError, match="device disconnected"):
             client.send_frame(CommandID.GET_POSE, 0)
         assert client.is_open
+    finally:
+        client.close()
+
+
+def test_a_failed_serial_port_is_closed_and_opened_again_by_the_next_client(broker):
+    """The arm was switched off: the broker closes its port, so the OS gives the
+    arm the same port name when it comes back."""
+    from pydobotlab import DobotConnectionError
+    from pydobotlab.transport import is_port_claimed
+
+    arm = broker._transports[FAKE_PORT]._serial
+
+    def vanished_device():  # on Linux, a USB device that is gone fails outside pyserial
+        raise OSError(5, "Input/output error")
+
+    arm.reset_input_buffer = vanished_device
+    client = broker_client(broker)
+    try:
+        with pytest.raises(DobotConnectionError, match="is not responding"):
+            client.send_frame(CommandID.GET_POSE, 0)
+        assert FAKE_PORT not in broker.attached_ports()
+        assert not is_port_claimed(FAKE_PORT)
+    finally:
+        client.close()
+
+    reconnected = broker_client(broker)  # the panel's Reconnect, once the arm is back
+    try:
+        assert reconnected.send_frame(CommandID.GET_POSE, 0).cmd_id == CommandID.GET_POSE
+    finally:
+        reconnected.close()
+
+
+def test_a_garbled_reply_keeps_the_port_open(broker):
+    from pydobotlab import DobotConnectionError
+
+    arm = broker._transports[FAKE_PORT]._serial
+    answer = arm.write
+
+    def noise_first_time(data):
+        arm.write = answer
+        arm._read += b"\xaa\xaa\x02\x0a\x00\x00"  # a frame with a wrong checksum
+        return len(data)
+
+    arm.write = noise_first_time
+    client = broker_client(broker)
+    try:
+        with pytest.raises(DobotConnectionError, match="checksum"):
+            client.send_frame(CommandID.GET_POSE, 0)
+        assert FAKE_PORT in broker.attached_ports()
+        assert client.send_frame(CommandID.GET_POSE, 0).cmd_id == CommandID.GET_POSE
     finally:
         client.close()
 

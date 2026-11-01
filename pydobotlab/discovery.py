@@ -38,6 +38,7 @@ from .errors import (
     DobotPermissionError,
     DobotPortInUseError,
     DobotProtocolError,
+    DobotTimeoutError,
 )
 from .protocol import Frame, unpack_floats
 from .transport import SerialTransport, is_port_claimed
@@ -124,7 +125,12 @@ def request_as_magician(
     transport: SerialTransport, command_id: CommandID, minimum_length: int, what: str
 ) -> Frame:
     """Send the read request ``command_id``; raise unless the reply has the Magician's format."""
-    reply = transport.send_frame(command_id, 0)
+    try:
+        reply = transport.send_frame(command_id, 0)
+    except DobotTimeoutError as error:
+        raise DobotProtocolError(
+            f"{transport.port!r} is not a Dobot Magician: {what} request not answered"
+        ) from error
     if reply.cmd_id != command_id or len(reply.params) < minimum_length:
         raise DobotProtocolError(
             f"{transport.port!r} is not a Dobot Magician: {what} request not answered "

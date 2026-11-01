@@ -16,6 +16,8 @@ from pydobotlab.config import (
     default_config,
     get_config,
     load_config,
+    save_arm_speed,
+    saved_arm_speed,
     set_config,
     user_config_path,
 )
@@ -52,6 +54,7 @@ def test_shipped_file_holds_every_setting():
         "broker",
         "discovery",
         "panel",
+        "motion",
         "simulator",
         "workspace",
         "messages",
@@ -99,6 +102,36 @@ def test_unwritable_user_directory_falls_back_to_the_defaults(user_directory, mo
 
     monkeypatch.setattr(config_module, "create_user_config", lambda path: False)
     assert load_config() == default_config()
+
+
+def test_each_arm_speed_is_saved_by_serial_number(user_directory):
+    assert saved_arm_speed("DT1") == 50  # the default speed
+    assert save_arm_speed("DT1", 30)
+    assert save_arm_speed("DT2", 70.5)
+    assert save_arm_speed("DT1", 40)  # replaces its line
+    text = user_config_path().read_text(encoding="utf-8")
+    assert text.count('"DT1"') == 1
+    assert "watchdog_interval = 2.0       # time between connection checks" in text
+    set_config(None)
+    assert (saved_arm_speed("DT1"), saved_arm_speed("DT2")) == (40, 70.5)
+    assert not save_arm_speed("", 10)  # an arm without a serial number uses the default
+
+
+def test_a_speed_is_saved_in_a_user_copy_from_an_older_version(user_directory):
+    path = user_config_path()
+    path.parent.mkdir(parents=True)
+    path.write_text("[panel]\npose_hz = 20.0\n", encoding="utf-8")
+    assert save_arm_speed("DT1", 30)
+    config = load_config()
+    assert config["motion"]["arms"] == {"DT1": 30}
+    assert config["panel"]["pose_hz"] == 20.0
+
+
+def test_a_speed_saved_by_another_program_is_read(user_directory):
+    save_arm_speed("DT1", 30)
+    path = user_config_path()
+    path.write_text(path.read_text().replace('"DT1" = 30', '"DT1" = 60'), encoding="utf-8")
+    assert saved_arm_speed("DT1") == 60
 
 
 def test_get_config_reads_once_until_it_is_cleared(tmp_path, monkeypatch):

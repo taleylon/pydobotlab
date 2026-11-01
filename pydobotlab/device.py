@@ -24,7 +24,7 @@ from queue import Queue
 
 from .alarms import AlarmSet, alarm_error, decode_alarms
 from .commands import CommandID
-from .config import get_config
+from .config import get_config, save_arm_speed
 from .discovery import find_free_port, no_dobot_found_error
 from .errors import (
     DobotConnectionError,
@@ -459,7 +459,9 @@ class Magician:
     def motion_params(self) -> tuple[float, float]:
         """``(vel, acc)`` global PTP velocity / acceleration ratios.
 
-        DobotLab usage: ``magician.motion_params = 50, 50``.
+        DobotLab usage: ``magician.motion_params = 50, 50``. Setting it also saves
+        ``vel`` as this arm's speed in the configuration file, which the control
+        panel sets when it connects.
         """
         frame = self.read_command(CommandID.GET_SET_PTP_COMMON_PARAMS)
         v, a = unpack_floats(frame.params[:8])
@@ -472,6 +474,7 @@ class Magician:
             CommandID.GET_SET_PTP_COMMON_PARAMS,
             pack_floats(float(vel), float(acc)),
         )
+        save_arm_speed(self.get_device_serial_number(), float(vel))
 
     # ---- 3.6.7  Set Jump Movement Params (PROPERTY) -------------------
     @property
