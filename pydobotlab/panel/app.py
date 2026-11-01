@@ -68,6 +68,14 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def hide_harmless_qt_warnings() -> None:
+    """Hide two harmless Qt warnings that flood the terminal on Ubuntu's Wayland
+    desktop. ``QT_LOGGING_RULES`` can still show them."""
+    from PySide6.QtCore import QLoggingCategory
+
+    QLoggingCategory.setFilterRules("qt.qpa.wayland.textinput=false\nqt.qpa.services=false")
+
+
 def show_panel_icon(app) -> None:
     """Show the pydobotlab icon on the windows, the taskbar, and the Linux dock."""
     from PySide6.QtGui import QIcon
@@ -133,6 +141,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from .shortcut import SHORTCUT
 
+    hide_harmless_qt_warnings()
     app = QApplication(sys.argv[:1])  # Qt only wants progname
     app.setApplicationName(SHORTCUT["application_name"])
     show_panel_icon(app)
