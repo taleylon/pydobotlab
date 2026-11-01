@@ -23,6 +23,7 @@ All notable changes to pydobotlab. The format follows [Keep a Changelog](https:/
 - A script could get "port is busy" while the control panel worked with the same arm. At startup, the panel checks whether a broker is already running before starting its own, and that "no" answer was reused for 2 seconds. A window opened in those 2 seconds did not find the broker and opened the port itself, so scripts could not reach the arm through the broker. Starting the broker now clears that answer, and a window never opens the port itself.
 - A serial port that fails while a command is sent raises `DobotConnectionError`, also when the error comes from outside pyserial (on Linux, `termios.error` when the USB device is gone).
 - Control panel: the Home button looks disabled when it is, for example while the arm homes or does not answer.
+- Control panel: on Ubuntu's Wayland desktop, the terminal is no longer flooded with two harmless Qt warnings (`qt.qpa.wayland.textinput ... but 0x0 is focused` and `qt.qpa.services: Failed to register with host portal`). `QT_LOGGING_RULES` can still show them.
 
 ## [0.2.1.1] - 2026-10-18
 
