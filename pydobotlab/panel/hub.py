@@ -8,6 +8,7 @@ panel to be reopened from the hub.
 from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt, QThread, Signal
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -28,6 +29,7 @@ from pydobotlab.transport import is_port_claimed
 
 from .panel import ControlPanel
 from .panel_config import PANEL_CONFIG
+from .shortcut import ICON_PNG
 from .widgets import version_label
 
 HUB_TEXT = PANEL_CONFIG["hub"]
@@ -60,7 +62,7 @@ class HubWindow(QMainWindow):
         self, parent=None, *, developer: bool = False, broker: DobotBroker | None = None
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("pydobotlab - devices")
+        self.setWindowTitle(HUB_TEXT["title"])
         self.resize(560, 380)
 
         self._developer = developer  # show ports; passed on to each control panel
@@ -81,6 +83,18 @@ class HubWindow(QMainWindow):
         root = QVBoxLayout(central)
         root.setContentsMargins(16, 16, 16, 16)
         root.setSpacing(10)
+
+        heading = QHBoxLayout()
+        icon = QLabel()
+        icon.setPixmap(
+            QPixmap(str(ICON_PNG)).scaled(36, 36, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        )
+        heading.addWidget(icon)
+        application_title = QLabel(HUB_TEXT["title"])
+        application_title.setObjectName("appTitle")
+        heading.addWidget(application_title)
+        heading.addStretch(1)
+        root.addLayout(heading)
 
         header = QHBoxLayout()
         title = QLabel("Dobot Magicians on this computer")

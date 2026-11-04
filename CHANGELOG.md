@@ -2,6 +2,14 @@
 
 All notable changes to pydobotlab. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.2.1] - 2026-11-04
+
+### Changed
+
+- Control panel: J1 to J4 in the pose readout are only shown; a target can no longer be typed into them. The arm does not check a joint target before it moves, so a typed angle beyond a joint's range moved the joint until it reached its physical limit. X, Y, Z and R work as before: a target out of reach is refused with an alarm, and the arm does not move.
+- Control panel: the alarm area is always shown, in one line under the header, so the window's layout no longer changes when an alarm comes or goes. With no alarm it shows a green "✔ No alarms"; while the arm is disconnected it is empty. A text too long for the line, such as several alarms or the `--dev` details, ends with "…", and a *Details* button shows all of it in a window.
+- The hub, the panel's first window, is titled *pydobotlab*, with the panel's icon above the list of arms.
+
 ## [0.2.2] - 2026-10-31
 
 ### Added
@@ -189,6 +197,7 @@ All notable changes to pydobotlab. The format follows [Keep a Changelog](https:/
 
 First release: the Python functions of the DobotLab Magician manual over serial, the firmware command queue, alarms, pose streaming, port discovery, the broker, the PySide6 control panel, and the simulator.
 
+[0.2.2.1]: https://github.com/taleylon/pydobotlab/compare/v0.2.2...v0.2.2.1
 [0.2.2]: https://github.com/taleylon/pydobotlab/compare/v0.2.1.1...v0.2.2
 [0.2.1.1]: https://github.com/taleylon/pydobotlab/compare/v0.2.1...v0.2.1.1
 [0.2.1]: https://github.com/taleylon/pydobotlab/compare/v0.2...v0.2.1

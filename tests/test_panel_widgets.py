@@ -404,6 +404,22 @@ def test_hub_groups_other_devices_in_a_collapsed_list(application, monkeypatch, 
         hub.close()
 
 
+def test_the_hub_is_titled_pydobotlab(application, monkeypatch):
+    from PySide6.QtWidgets import QLabel
+
+    from pydobotlab import Discovery
+    from pydobotlab.panel.hub import HubWindow
+
+    monkeypatch.setattr(Discovery, "discover_with_diagnostics", staticmethod(lambda: ([], [])))
+    hub = HubWindow()
+    try:
+        hub._worker.wait()
+        assert hub.windowTitle() == "pydobotlab"
+        assert hub.findChild(QLabel, "appTitle").text() == "pydobotlab"
+    finally:
+        hub.close()
+
+
 def test_hub_and_panel_show_the_version(application, monkeypatch):
     import serial
     import serial.tools.list_ports
@@ -569,6 +585,7 @@ def test_an_arm_that_does_not_answer_shows_as_disconnected_at_once(
         assert panel._reconnect_button.isVisibleTo(panel)
         assert not panel._home_button.isEnabled()
         assert panel.statusBar().currentMessage() == NOT_RESPONDING
+        assert panel._alarm_banner.text() == ""  # alarms cannot be read
 
         monkeypatch.setattr(panel._bot, "get_device_version", answers)
         panel.check_connection()
@@ -693,14 +710,75 @@ def wait_for_homing(application, panel):
     assert panel._home_worker is None, "homing did not finish"
 
 
+def wait_for_alarm_area(application, panel, text):
+    import time
+
+    deadline = time.monotonic() + 5
+    while panel._alarm_banner.text() != text and time.monotonic() < deadline:
+        application.processEvents()
+        time.sleep(0.02)
+    assert panel._alarm_banner.text() == text
+
+
 def test_alarm_banner_is_short_and_the_jog_pads_stay_enabled(application, simulated_arm):
     from pydobotlab.panel.panel import ControlPanel
 
     panel = ControlPanel("/dev/sim0")
     try:
+        wait_for_alarm_area(application, panel, "✔ No alarms")  # once the alarms are read
         panel.update_alarms([LIMIT_POS_J3])
         assert panel._alarm_banner.text() == f"Alarm: {FOREARM_LIMIT_TEXT}"
         assert all(pad.isEnabled() for pad in jog_pads(panel))
+    finally:
+        panel.close()
+
+
+def test_the_alarm_area_keeps_its_size_and_shows_long_text_in_a_window(application, monkeypatch):
+    import pydobotlab.panel.widgets as widgets
+
+    shown = []
+    monkeypatch.setattr(widgets.QMessageBox, "warning", lambda *args: shown.append(args[1:]))
+    banner = widgets.AlarmBanner()
+    banner.resize(400, banner.sizeHint().height())
+    banner.show()
+    application.processEvents()
+    details = banner._details_button
+    heights = [banner.sizeHint().height()]
+    try:
+        banner.show_no_alarms()
+        assert banner.text() == "✔ No alarms"
+        assert not banner.is_cut() and not details.isVisibleTo(banner)
+        heights.append(banner.sizeHint().height())
+
+        banner.show_alarms("Alarm: short", "short")
+        assert not banner.is_cut() and not details.isVisibleTo(banner)
+
+        long_line = "Alarms: " + "  •  ".join([FOREARM_LIMIT_TEXT] * 3)
+        banner.show_alarms(long_line, "all of it")
+        assert banner.is_cut() and banner._label.text().endswith("…")
+        assert details.isVisibleTo(banner)  # only when the line is cut
+        heights.append(banner.sizeHint().height())
+        assert len(set(heights)) == 1
+
+        details.click()
+        assert shown == [("Alarms", "all of it")]
+    finally:
+        banner.close()
+
+
+def test_a_long_alarm_does_not_change_the_window_layout(application, simulated_arm):
+    from pydobotlab.panel.panel import ControlPanel
+
+    panel = ControlPanel("/dev/sim0", developer=True)
+    try:
+        panel.resize(880, 760)
+        panel.show()
+        application.processEvents()
+        before = (panel.minimumSizeHint().width(), panel._xy_pad.height())
+        panel.update_alarms([LIMIT_POS_J3, 0x48, OUT_OF_WORKSPACE])
+        application.processEvents()
+        assert (panel.minimumSizeHint().width(), panel._xy_pad.height()) == before
+        assert panel._alarm_banner.is_cut()
     finally:
         panel.close()
 
@@ -768,14 +846,13 @@ def test_home_never_shows_an_alarm_pop_up(application, simulated_arm, monkeypatc
 
 
 def test_ptp_target_changes_one_coordinate():
-    from pydobotlab import Pose, PTPMode
+    from pydobotlab import Pose
     from pydobotlab.panel.panel import ptp_target
 
     pose = Pose(200, 10, 50, 5, 3, 20, 30, 2)
-    assert ptp_target(pose, "Z", 80) == (PTPMode.MOVJ_XYZ, (200, 10, 80, 5))
-    assert ptp_target(pose, "J2", 40) == (PTPMode.MOVJ_ANGLE, (3, 40, 30, 2))
+    assert ptp_target(pose, "Z", 80) == (200, 10, 80, 5)
     with pytest.raises(ValueError, match="unknown coordinate"):
-        ptp_target(pose, "L", 1)
+        ptp_target(pose, "J2", 40)  # joint values cannot be typed
 
 
 def test_a_value_being_typed_stops_following_the_arm(application):
@@ -833,30 +910,32 @@ def test_a_typed_value_moves_the_arm_and_keeps_the_other_coordinates(application
         panel._cartesian_readout.entered.emit("Z", 80.0)
         # One move at a time: no typed targets until this one ends.
         assert not panel._cartesian_readout.isEnabled()
-        assert not panel._joint_readout.isEnabled()
         wait_for_move(application, panel)
 
         assert rounded_position(panel._bot) == (200, 0, 80)
         assert panel.statusBar().currentMessage() == "move complete"
-        assert panel._cartesian_readout.isEnabled() and panel._joint_readout.isEnabled()
+        assert panel._cartesian_readout.isEnabled()
     finally:
         panel.close()
 
 
-def test_a_typed_joint_angle_moves_with_movj_angle(application, simulated_arm, monkeypatch):
-    from pydobotlab import PTPMode
+def test_joint_values_are_only_shown(application, simulated_arm):
+    """The arm does not check a joint target before moving, so J1 to J4 cannot be typed."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
     from pydobotlab.panel.panel import ControlPanel
 
     panel = ControlPanel("/dev/sim0")
     try:
-        moves = []
-        monkeypatch.setattr(
-            panel._bot, "ptp", lambda mode, *target: moves.append((mode, target)) or True
-        )
-        pose = panel._bot.get_pose()
-        panel._joint_readout.entered.emit("J2", 40.0)
-        wait_for_move(application, panel)
-        assert moves == [(PTPMode.MOVJ_ANGLE, (pose.j1, 40.0, pose.j3, pose.j4))]
+        field = panel._joint_readout.fields["J2"]
+        QTest.mouseClick(field, Qt.LeftButton)
+        QTest.keyClicks(field, "40")
+        QTest.keyClick(field, Qt.Key_Return)
+        assert field.isReadOnly() and not field.editing
+        assert panel._move_worker is None
+        assert not field.toolTip()
+        assert panel._cartesian_readout.fields["X"].toolTip()  # X, Y, Z, R can be typed
     finally:
         panel.close()
 
@@ -881,7 +960,7 @@ def test_a_typed_target_out_of_reach_shows_the_alarm_without_a_pop_up(
         assert panel.statusBar().currentMessage() == "the arm refused the move - see the alarm"
         assert warnings == []
         deadline = time.monotonic() + 5
-        while not panel._alarm_banner.isVisibleTo(panel) and time.monotonic() < deadline:
+        while not panel._alarm_banner.text().startswith("Alarm") and time.monotonic() < deadline:
             application.processEvents()
             time.sleep(0.02)
         assert panel._alarm_banner.text() == (

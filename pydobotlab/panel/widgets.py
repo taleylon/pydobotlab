@@ -9,7 +9,8 @@ Two headline widgets:
 * :class:`CoordReadout` - a vertical stack of (label, value) rows for one
   coordinate system. Used twice in the panel: once for ``X / Y / Z / R``
   next to the Cartesian jog pads, once for ``J1..J4`` next to the joint
-  jog pads. A value can be clicked and a target typed into it.
+  jog pads. An X, Y, Z or R value can be clicked and a target typed into it.
+* :class:`AlarmBanner` - one line that always shows the alarm state.
 """
 
 from __future__ import annotations
@@ -31,6 +32,8 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
+    QPushButton,
     QSizePolicy,
     QWidget,
 )
@@ -272,16 +275,22 @@ class PoseField(QLineEdit):
 
     A click starts editing: the value stops following the arm and is
     selected. Enter emits ``entered(value)``; Esc or a click elsewhere
-    cancels. Either way the live value shows again.
+    cancels. Either way the live value shows again. A field that is not
+    ``editable`` only shows the value.
     """
 
     entered = Signal(float)
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, editable: bool = True, parent=None) -> None:
         super().__init__("0.00", parent)
         self.setObjectName("poseValue")
         self.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.setToolTip(PANEL_CONFIG["pose_entry"]["tooltip"])
+        if editable:
+            self.setToolTip(PANEL_CONFIG["pose_entry"]["tooltip"])
+        else:
+            self.setReadOnly(True)
+            self.setFocusPolicy(Qt.NoFocus)
+            self.setCursor(Qt.ArrowCursor)
         validator = QDoubleValidator(-9999.0, 9999.0, 3, self)
         validator.setNotation(QDoubleValidator.StandardNotation)
         validator.setLocale(QLocale.c())  # a point as the decimal separator in every locale
@@ -317,12 +326,12 @@ class PoseField(QLineEdit):
 
     def mousePressEvent(self, event) -> None:
         super().mousePressEvent(event)
-        if not self.editing:
+        if not self.editing and not self.isReadOnly():
             self.start_editing()
 
     def focusInEvent(self, event) -> None:
         super().focusInEvent(event)
-        if not self.editing:
+        if not self.editing and not self.isReadOnly():
             self.start_editing()
 
     def focusOutEvent(self, event) -> None:
@@ -347,12 +356,13 @@ class CoordReadout(QFrame):
     each coord system's numeric readout shares a row with its jog controls.
 
     Each value is a :class:`PoseField`; ``entered(name, value)`` is emitted
-    when a target is typed into one.
+    when a target is typed into one. With ``editable=False`` the values are
+    only shown.
     """
 
     entered = Signal(str, float)
 
-    def __init__(self, labels: list[str], parent=None) -> None:
+    def __init__(self, labels: list[str], editable: bool = True, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("card")
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
@@ -366,7 +376,7 @@ class CoordReadout(QFrame):
         for row, name in enumerate(labels):
             label = QLabel(name)
             label.setObjectName("poseLabel")
-            field = PoseField()
+            field = PoseField(editable)
             field.entered.connect(lambda value, name=name: self.entered.emit(name, value))
             layout.addWidget(label, row, 0)
             layout.addWidget(field, row, 1)
@@ -377,6 +387,92 @@ class CoordReadout(QFrame):
             field = self.fields.get(name)
             if field is not None:
                 field.show_value(value)
+
+
+class ElidedLabel(QLabel):
+    """One line of text that ends with "…" when it does not fit. Emits
+    ``elided(bool)`` each time the text is fitted: ``True`` when it was cut."""
+
+    elided = Signal(bool)
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.full_text = ""
+        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)  # never widens the window
+
+    def set_full_text(self, text: str) -> None:
+        self.full_text = text
+        self.fit_text()
+
+    def fit_text(self) -> None:
+        width = self.contentsRect().width()
+        shown = self.fontMetrics().elidedText(self.full_text, Qt.ElideRight, width)
+        self.setText(shown)
+        self.elided.emit(shown != self.full_text)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self.fit_text()
+
+
+class AlarmBanner(QFrame):
+    """One line that always shows the alarm state, so the window's layout does
+    not change when an alarm comes or goes.
+
+    A line too long to fit ends with "…", and a Details button shows all of it
+    in an alert window.
+    """
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        text = PANEL_CONFIG["alarm_text"]
+        self._no_alarms = text["no_alarms"]
+        self._details_title = text["details_title"]
+        self._details = ""
+        self.setObjectName("alarmBanner")
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self._label = ElidedLabel()
+        self._details_button = QPushButton(text["details_button"])
+        self._details_button.setObjectName("alarmDetails")
+        policy = self._details_button.sizePolicy()
+        policy.setRetainSizeWhenHidden(True)  # the line keeps its size with or without it
+        self._details_button.setSizePolicy(policy)
+        self._details_button.clicked.connect(self.show_details)
+        self._label.elided.connect(self._details_button.setVisible)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(12, 4, 6, 4)
+        layout.addWidget(self._label, stretch=1)
+        layout.addWidget(self._details_button)
+        self.show_unknown()
+
+    def text(self) -> str:
+        """The whole line, before it is cut to fit."""
+        return self._label.full_text
+
+    def is_cut(self) -> bool:
+        return self._label.text() != self._label.full_text
+
+    def show_alarms(self, line: str, details: str) -> None:
+        """Show ``line``; ``details`` is the full text for the Details window."""
+        self.set_state("alarm", line, details)
+
+    def show_no_alarms(self) -> None:
+        self.set_state("clear", self._no_alarms)
+
+    def show_unknown(self) -> None:
+        """Show nothing, as while the arm is disconnected and its alarms cannot be read."""
+        self.set_state("unknown", "")
+
+    def set_state(self, state: str, line: str, details: str = "") -> None:
+        self._details = details or line
+        self.setProperty("state", state)
+        for widget in (self, self._label):  # apply the style of the new state
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+        self._label.set_full_text(line)
+
+    def show_details(self) -> None:
+        QMessageBox.warning(self, self._details_title, self._details)
 
 
 class JumpParamsCard(QFrame):

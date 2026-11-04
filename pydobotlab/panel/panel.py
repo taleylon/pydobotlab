@@ -41,7 +41,7 @@ from pydobotlab.protocol import JOGCmd, JogMode, pack_floats, pack_u8
 
 from .alarm_text import alarm_lines
 from .panel_config import PANEL_CONFIG
-from .widgets import CoordReadout, JogPad, JumpParamsCard, version_label
+from .widgets import AlarmBanner, CoordReadout, JogPad, JumpParamsCard, version_label
 
 POSE_ENTRY_TEXT = PANEL_CONFIG["pose_entry"]
 CONNECTION_TEXT = PANEL_CONFIG["connection"]
@@ -52,22 +52,14 @@ def slider_percent(speed_ratio: float) -> int:
     return max(1, min(100, int(round(speed_ratio))))
 
 
-def ptp_target(pose: Pose, name: str, value: float) -> tuple[PTPMode, tuple[float, ...]]:
-    """The PTP mode and target that set one coordinate of ``pose`` to ``value``.
-
-    ``name`` is X, Y, Z, R (a ``MOVJ_XYZ`` move) or J1 to J4 (a ``MOVJ_ANGLE``
-    move); the other three coordinates keep their values.
-    """
-    if name.startswith("J"):
-        mode = PTPMode.MOVJ_ANGLE
-        target = {"J1": pose.j1, "J2": pose.j2, "J3": pose.j3, "J4": pose.j4}
-    else:
-        mode = PTPMode.MOVJ_XYZ
-        target = {"X": pose.x, "Y": pose.y, "Z": pose.z, "R": pose.r}
+def ptp_target(pose: Pose, name: str, value: float) -> tuple[float, float, float, float]:
+    """The ``(x, y, z, r)`` target that sets coordinate ``name`` (X, Y, Z or R)
+    of ``pose`` to ``value``; the other three keep their values."""
+    target = {"X": pose.x, "Y": pose.y, "Z": pose.z, "R": pose.r}
     if name not in target:
         raise ValueError(f"unknown coordinate {name!r}")
     target[name] = value
-    return mode, tuple(target.values())
+    return tuple(target.values())
 
 
 # ---------------------------------------------------------------------------
@@ -99,7 +91,7 @@ class PoseStreamer(QObject):
         self._alarm_period_ticks = max(1, int(round(hz / alarm_hz)))
         self._speed_period_ticks = max(1, int(round(hz / speed_hz)))
         self._tick = 0
-        self._last_alarms: list[int] = []
+        self._last_alarms: list[int] | None = None  # the first check always reports
         self._last_speed: float = -1.0
 
     def push(self, pose) -> None:
@@ -173,8 +165,8 @@ class MoveWorker(QThread):
 
     def run(self) -> None:
         try:
-            mode, target = ptp_target(self._bot.get_pose(), self._name, self._value)
-            self._bot.ptp(mode, *target)
+            target = ptp_target(self._bot.get_pose(), self._name, self._value)
+            self._bot.ptp(PTPMode.MOVJ_XYZ, *target)
         except DobotAlarmError as error:
             self.done.emit(False, True, str(error))
             return
@@ -257,10 +249,7 @@ class ControlPanel(QMainWindow):
         header.addWidget(self._clear_alarm_button)
         root.addLayout(header)
 
-        # Alarm banner (hidden when empty)
-        self._alarm_banner = QLabel("")
-        self._alarm_banner.setObjectName("alarmBanner")
-        self._alarm_banner.setVisible(False)
+        self._alarm_banner = AlarmBanner()
         root.addWidget(self._alarm_banner)
 
         # Speed slider
@@ -292,7 +281,8 @@ class ControlPanel(QMainWindow):
         # single horizontal row so the numbers stay visually associated with
         # the controls that move them (matches the DobotLab layout exactly).
         self._cartesian_readout = CoordReadout(["X", "Y", "Z", "R"])
-        self._joint_readout = CoordReadout(["J1", "J2", "J3", "J4"])
+        # J1 to J4 are only shown: the arm does not check a joint target before moving.
+        self._joint_readout = CoordReadout(["J1", "J2", "J3", "J4"], editable=False)
 
         # Layout copied from the Windows DobotLab arm control panel.
         # fmt: off
@@ -404,8 +394,7 @@ class ControlPanel(QMainWindow):
         for pad in (self._j12_pad, self._j34_pad):
             pad.jog.connect(lambda c: self.start_jog(c, JogMode.JOINT))
             pad.stop.connect(self.stop_jog)
-        for readout in (self._cartesian_readout, self._joint_readout):
-            readout.entered.connect(self.start_move)
+        self._cartesian_readout.entered.connect(self.start_move)
 
     # ---- Connection lifecycle ----------------------------------------------
 
@@ -589,8 +578,7 @@ class ControlPanel(QMainWindow):
 
     def set_pose_entry_enabled(self, enabled: bool) -> None:
         """Allow or block typing targets into the pose values; they keep showing the pose."""
-        for readout in (self._cartesian_readout, self._joint_readout):
-            readout.setEnabled(enabled)
+        self._cartesian_readout.setEnabled(enabled)
 
     @Slot()
     def clear_alarms(self) -> None:
@@ -615,11 +603,11 @@ class ControlPanel(QMainWindow):
             QMessageBox.warning(self, "Clear alarm failed", str(error))
             return
         self.statusBar().showMessage("alarms cleared", 2000)
-        self._alarm_banner.setVisible(False)
+        self._alarm_banner.show_no_alarms()
 
     @Slot(list)
     def update_alarms(self, codes: list) -> None:
-        """Show the active alarms in the banner.
+        """Show the active alarms, or that there are none, in the alarm area.
 
         The jog pads stay enabled during an alarm, as in DobotLab: the arm
         refuses a jog it cannot make, and a joint-limit alarm ends by itself
@@ -629,13 +617,10 @@ class ControlPanel(QMainWindow):
         active = bool(codes)
         if active:
             lines = alarm_lines(codes, self._developer)
-            if len(lines) == 1:
-                self._alarm_banner.setText(f"Alarm: {lines[0]}")
-            else:
-                self._alarm_banner.setText("Alarms:\n" + "\n".join(f"  • {line}" for line in lines))
-            self._alarm_banner.setVisible(True)
+            title = "Alarm" if len(lines) == 1 else "Alarms"
+            self._alarm_banner.show_alarms(f"{title}: " + "  •  ".join(lines), "\n".join(lines))
         else:
-            self._alarm_banner.setVisible(False)
+            self._alarm_banner.show_no_alarms()
         if active and not self._alarm_active:
             try:
                 self._bot.jog_stop()
@@ -704,6 +689,7 @@ class ControlPanel(QMainWindow):
             self._status_label.setText("● Disconnected")
             self._status_label.setStyleSheet("color:#ff6b6b; font-weight:600;")
             self._reconnect_button.setVisible(True)
+            self._alarm_banner.show_unknown()  # alarms cannot be read until the arm answers
             # Stop the pose stream so it stops error-spamming the log.
             try:
                 self._bot.stop_pose_stream()
