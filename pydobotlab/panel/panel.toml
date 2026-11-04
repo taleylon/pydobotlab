@@ -19,6 +19,10 @@ allow_launching = "If the desktop icon shows a warning, right-click it and choos
 not_supported = "Shortcuts can be created on Windows and Linux."
 failed = "Could not create the shortcut: {error}"
 
+# The hub: the first window, which lists the arms.
+[hub]
+title = "pydobotlab"                            # its window title and heading
+
 # Shown when the scan finds no Dobot Magician. The ports that were tried are
 # listed only in developer mode (--dev).
 [hub.not_found]
@@ -63,6 +67,11 @@ failed = "move failed: {error}"
 # Joint names in alarm messages, for joints 1 to 4.
 joint_names = ["base (J1)", "rear arm (J2)", "forearm (J3)", "end-effector rotation (J4)"]
 unknown = "Unknown alarm. Press Clear Alarm; if it comes back, power-cycle the arm."
+# The alarm area: its text with no alarm, and the button and window that show
+# alarm text too long for its line.
+no_alarms = "✔ No alarms"
+details_button = "Details"
+details_title = "Alarms"
 
 # One line per alarm group. {joint} is the joint's name and {number} its number.
 # A joint-limit alarm ends by itself when the joint is jogged back off the limit.
