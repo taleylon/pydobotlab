@@ -15,7 +15,7 @@ if alarms:
 
 ## When an alarm occurs
 
-While an alarm is active, the status LED of the arm is red and the arm does not move: a move queued during an alarm is dropped. The next command that waits for the arm, such as [`ptp`](../api/motion.md#ptp), raises a [`DobotAlarmError`](../api/errors.md#dobotalarmerror) subclass, which stops the program unless it is caught. Commands still queued are discarded, so clearing the alarm does not resume them. The control panel shows the active alarms in its banner.
+While an alarm is active, the status LED of the arm is red and the arm does not move: a move queued during an alarm is dropped. The next command that waits for the arm, such as [`ptp`](../api/motion.md#ptp), raises a [`DobotAlarmError`](../api/errors.md#dobotalarmerror) subclass, which stops the program unless it is caught. Commands still queued are discarded, so clearing the alarm does not resume them. The control panel shows the active alarms in its alarm area.
 
 Clear the alarm with [`clear_alarm`](../api/alarms.md#clear_alarm) or the Clear Alarm button of the panel. The LED turns green. A joint-limit alarm ends by itself when the joint is jogged back off the limit. [`set_home`](../api/motion.md#set_home) and the panel's Home button work also during an alarm: the arm homes, and the alarms are cleared when homing ends.
 
